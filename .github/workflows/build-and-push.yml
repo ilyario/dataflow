@@ -96,18 +96,18 @@ jobs:
           tag_name: ${{ steps.tag.outputs.TAG_NAME }}
           name: Release ${{ steps.tag.outputs.TAG_NAME }}
           body: |
-            ## Что нового в ${{ steps.tag.outputs.TAG_NAME }}
+            ## What's new in ${{ steps.tag.outputs.TAG_NAME }}
 
             ${{ steps.release_notes.outputs.notes }}
 
             ## Docker Image
 
-            Docker образ доступен по адресу:
+            Docker image is available at:
             ```
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.TAG_NAME }}
             ```
 
-            ## Установка
+            ## Installation
 
             ```bash
             helm install dataflow-operator ./helm/dataflow-operator \

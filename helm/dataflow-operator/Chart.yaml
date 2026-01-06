@@ -9,9 +9,9 @@ keywords:
   - operator
   - kubernetes
   - streaming
-home: https://github.com/dataflow-operator/dataflow
+home: https://github.com/ilyario/dataflow
 sources:
-  - https://github.com/dataflow-operator/dataflow
+  - https://github.com/ilyario/dataflow
 maintainers:
-  - name: DataFlow Team
+  - name: ilyario (Ilya Ponomarev)
 
