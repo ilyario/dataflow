@@ -1,0 +1,17 @@
+apiVersion: v2
+name: dataflow-operator
+description: A Helm chart for DataFlow Operator - Kubernetes оператор для потоковой передачи данных
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - dataflow
+  - operator
+  - kubernetes
+  - streaming
+home: https://github.com/dataflow-operator/dataflow
+sources:
+  - https://github.com/dataflow-operator/dataflow
+maintainers:
+  - name: DataFlow Team
+

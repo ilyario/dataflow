@@ -1,0 +1,28 @@
+apiVersion: dataflow.dataflow.io/v1
+kind: DataFlow
+metadata:
+  name: kafka-to-iceberg-flatten
+spec:
+  source:
+    type: kafka
+    kafka:
+      brokers:
+        - localhost:9092
+      topic: stock-topic
+      consumerGroup: dataflow-iceberg-group
+  sink:
+    type: iceberg
+    iceberg:
+      restCatalogUrl: "http://localhost:8081"
+      namespace: default
+      table: stock_items
+      autoCreateNamespace: true
+      autoCreateTable: true
+  transformations:
+    - type: flatten
+      flatten:
+        field: rowsStock
+    - type: timestamp
+      timestamp:
+        fieldName: created_at
+

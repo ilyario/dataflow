@@ -1,0 +1,18 @@
+apiVersion: dataflow.dataflow.io/v1
+kind: DataFlow
+metadata:
+  name: iceberg-to-rabbitmq
+spec:
+  source:
+    type: iceberg
+    iceberg:
+      restCatalogUrl: "http://localhost:8081"
+      namespace: default
+      table: test_rabbitmq_iceberg
+  sink:
+    type: rabbitmq
+    rabbitmq:
+      url: "amqp://guest:guest@localhost:5672/"
+      exchange: output-exchange
+      routingKey: output.queue
+

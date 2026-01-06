@@ -1,0 +1,358 @@
+/*
+Copyright 2024.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package transformers
+
+import (
+	"testing"
+
+	v1 "github.com/dataflow-operator/dataflow/api/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCreateTransformer_Timestamp(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid timestamp transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "timestamp",
+				Timestamp: &v1.TimestampTransformation{
+					FieldName: "created_at",
+					Format:    "RFC3339",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "timestamp without config",
+			transformation: &v1.TransformationSpec{
+				Type: "timestamp",
+			},
+			wantErr:     true,
+			errContains: "timestamp transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
+func TestCreateTransformer_Flatten(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid flatten transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "flatten",
+				Flatten: &v1.FlattenTransformation{
+					Field: "$.items",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "flatten without config",
+			transformation: &v1.TransformationSpec{
+				Type: "flatten",
+			},
+			wantErr:     true,
+			errContains: "flatten transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
+func TestCreateTransformer_Filter(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid filter transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "filter",
+				Filter: &v1.FilterTransformation{
+					Condition: "$.status == 'active'",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter without config",
+			transformation: &v1.TransformationSpec{
+				Type: "filter",
+			},
+			wantErr:     true,
+			errContains: "filter transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
+func TestCreateTransformer_Mask(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid mask transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "mask",
+				Mask: &v1.MaskTransformation{
+					Fields:     []string{"$.password", "$.email"},
+					MaskChar:   "*",
+					KeepLength: true,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "mask without config",
+			transformation: &v1.TransformationSpec{
+				Type: "mask",
+			},
+			wantErr:     true,
+			errContains: "mask transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
+func TestCreateTransformer_Router(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid router transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "router",
+				Router: &v1.RouterTransformation{
+					Routes: []v1.RouteRule{
+						{
+							Condition: "$.type == 'error'",
+							Sink: v1.SinkSpec{
+								Type: "kafka",
+								Kafka: &v1.KafkaSinkSpec{
+									Brokers: []string{"localhost:9092"},
+									Topic:   "errors",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "router without config",
+			transformation: &v1.TransformationSpec{
+				Type: "router",
+			},
+			wantErr:     true,
+			errContains: "router transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
+func TestCreateTransformer_Select(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid select transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "select",
+				Select: &v1.SelectTransformation{
+					Fields: []string{"$.id", "$.name", "$.status"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "select without config",
+			transformation: &v1.TransformationSpec{
+				Type: "select",
+			},
+			wantErr:     true,
+			errContains: "select transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
+func TestCreateTransformer_Remove(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid remove transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "remove",
+				Remove: &v1.RemoveTransformation{
+					Fields: []string{"$.password", "$.secret"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "remove without config",
+			transformation: &v1.TransformationSpec{
+				Type: "remove",
+			},
+			wantErr:     true,
+			errContains: "remove transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
+func TestCreateTransformer_UnsupportedType(t *testing.T) {
+	transformation := &v1.TransformationSpec{
+		Type: "unsupported",
+	}
+
+	transformer, err := CreateTransformer(transformation)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported transformation type")
+	assert.Nil(t, transformer)
+}

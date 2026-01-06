@@ -1,0 +1,25 @@
+{
+  "type": "stock",
+  "version": 32476984,
+  "object": "C388",
+  "rowsReserveTransit": null,
+  "rowsStock": [
+    {
+      "sku": 400125868,
+      "section": "A015",
+      "quantity": 1,
+      "available": 0,
+      "blockStock": 0
+    },
+    {
+      "sku": 400125868,
+      "section": "A001",
+      "quantity": 0,
+      "available": 0,
+      "blockStock": 0
+    }
+  ]
+}
+
+
+

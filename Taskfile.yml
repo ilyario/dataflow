@@ -1,0 +1,166 @@
+version: '3'
+
+vars:
+  IMG:
+    sh: echo "${IMG:-controller:latest}"
+  CRD_OPTIONS: "crd:trivialVersions=true,preserveUnknownFields=false"
+  ENVTEST_K8S_VERSION: "1.28.0"
+  CONTROLLER_TOOLS_VERSION: "v0.13.0"
+  LOCALBIN:
+    sh: echo "$(pwd)/bin"
+  GOBIN:
+    sh: |
+      if [ -z "$(go env GOBIN)" ]; then
+        echo "$(go env GOPATH)/bin"
+      else
+        go env GOBIN
+      fi
+
+tasks:
+  default:
+    desc: Build manager binary
+    deps: [generate, fmt, vet]
+    cmds:
+      - go build -o bin/manager main.go
+
+  help:
+    desc: Display this help
+    cmds:
+      - task --list
+
+  # Development tasks
+  manifests:
+    desc: Generate ClusterRole and CustomResourceDefinition objects
+    deps: [controller-gen]
+    cmds:
+      - '{{.LOCALBIN}}/controller-gen rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases'
+
+  generate:
+    desc: Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations
+    deps: [controller-gen]
+    cmds:
+      - '{{.LOCALBIN}}/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."'
+
+  fmt:
+    desc: Run go fmt against code
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet against code
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run all tests with coverage (requires envtest)
+    deps: [manifests, generate, fmt, vet, envtest]
+    cmds:
+      - |
+        KUBEBUILDER_ASSETS="$$({{.LOCALBIN}}/setup-envtest use {{.ENVTEST_K8S_VERSION}} -p path)" \
+        go test ./... -coverprofile cover.out
+
+  test-unit:
+    desc: Run unit tests without envtest with statistics
+    cmds:
+      - ./scripts/run-tests-with-stats.sh ./...
+
+  test-unit-simple:
+    desc: Run unit tests without envtest (simple output)
+    cmds:
+      - go test ./... -v
+
+  test-all:
+    desc: Run all unit tests (alias for test-unit)
+    cmds:
+      - task: test-unit
+
+  test-integration:
+    desc: Run integration tests with statistics
+    cmds:
+      - ./scripts/run-tests-with-stats.sh ./test/integration/...
+
+  test-integration-simple:
+    desc: Run integration tests (simple output)
+    cmds:
+      - go test ./test/integration/... -v
+
+  # Build tasks
+  build:
+    desc: Build manager binary
+    deps: [generate, fmt, vet]
+    cmds:
+      - go build -o bin/manager main.go
+
+  run:
+    desc: Run a controller from your host
+    deps: [manifests, generate, fmt, vet]
+    cmds:
+      - go run ./main.go
+
+  docker-build:
+    desc: Build docker image with the manager
+    deps: [test]
+    cmds:
+      - docker build -t {{.IMG}} .
+
+  docker-push:
+    desc: Push docker image with the manager
+    cmds:
+      - docker push {{.IMG}}
+
+  # Deployment tasks
+  install:
+    desc: Install CRDs into the K8s cluster specified in ~/.kube/config
+    deps: [manifests]
+    cmds:
+      - kubectl apply -f config/crd/bases
+
+  uninstall:
+    desc: Uninstall CRDs from the K8s cluster specified in ~/.kube/config
+    deps: [manifests]
+    cmds:
+      - |
+        ignore_not_found="${IGNORE_NOT_FOUND:-false}"
+        kubectl delete --ignore-not-found=$ignore_not_found -f config/crd/bases
+
+  deploy:
+    desc: Deploy controller to the K8s cluster specified in ~/.kube/config
+    deps: [manifests]
+    cmds:
+      - |
+        cd config/manager && kustomize edit set image controller={{.IMG}}
+        kustomize build config/default | kubectl apply -f -
+
+  undeploy:
+    desc: Undeploy controller from the K8s cluster specified in ~/.kube/config
+    cmds:
+      - |
+        ignore_not_found="${IGNORE_NOT_FOUND:-false}"
+        kustomize build config/default | kubectl delete --ignore-not-found=$ignore_not_found -f -
+
+  # Build Dependencies
+  controller-gen:
+    desc: Download controller-gen locally if necessary
+    cmds:
+      - |
+        if [ ! -f {{.LOCALBIN}}/controller-gen ]; then
+          GOBIN={{.LOCALBIN}} go install sigs.k8s.io/controller-tools/cmd/controller-gen@{{.CONTROLLER_TOOLS_VERSION}}
+        fi
+    preconditions:
+      - test -d {{.LOCALBIN}} || mkdir -p {{.LOCALBIN}}
+
+  envtest:
+    desc: Download envtest-setup locally if necessary
+    cmds:
+      - |
+        if [ ! -f {{.LOCALBIN}}/setup-envtest ]; then
+          GOBIN={{.LOCALBIN}} go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+        fi
+    preconditions:
+      - test -d {{.LOCALBIN}} || mkdir -p {{.LOCALBIN}}
+
+  tidy:
+    desc: Run go mod tidy
+    cmds:
+      - go mod tidy
+

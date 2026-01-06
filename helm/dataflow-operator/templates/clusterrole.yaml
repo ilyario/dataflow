@@ -1,0 +1,36 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "dataflow-operator.fullname" . }}-role
+  labels:
+    {{- include "dataflow-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - dataflow.dataflow.io
+  resources:
+  - dataflows
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - dataflow.dataflow.io
+  resources:
+  - dataflows/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - dataflow.dataflow.io
+  resources:
+  - dataflows/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
+
