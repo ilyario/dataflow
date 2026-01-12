@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -57,6 +58,43 @@ func NewDataFlowReconciler(client client.Client, scheme *runtime.Scheme) *DataFl
 	}
 }
 
+// updateStatusWithRetry обновляет статус DataFlow с retry логикой для обработки конфликтов оптимистичной блокировки
+func (r *DataFlowReconciler) updateStatusWithRetry(ctx context.Context, req ctrl.Request, updateFn func(*dataflowv1.DataFlow)) error {
+	log := log.FromContext(ctx)
+	maxRetries := 3
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		var df dataflowv1.DataFlow
+		if err := r.Get(ctx, req.NamespacedName, &df); err != nil {
+			if attempt < maxRetries-1 {
+				log.Error(err, "unable to fetch DataFlow for status update, retrying", "attempt", attempt+1)
+				time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+				continue
+			}
+			return fmt.Errorf("failed to fetch DataFlow after %d attempts: %w", maxRetries, err)
+		}
+
+		// Применяем функцию обновления статуса
+		updateFn(&df)
+
+		if err := r.Status().Update(ctx, &df); err != nil {
+			if apierrors.IsConflict(err) {
+				if attempt < maxRetries-1 {
+					log.Info("status update conflict, retrying", "attempt", attempt+1, "maxRetries", maxRetries)
+					time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+					continue
+				}
+				return fmt.Errorf("failed to update status after %d retries due to conflict: %w", maxRetries, err)
+			}
+			return err
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("failed to update status after %d attempts", maxRetries)
+}
+
 //+kubebuilder:rbac:groups=dataflow.dataflow.io,resources=dataflows,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=dataflow.dataflow.io,resources=dataflows/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=dataflow.dataflow.io,resources=dataflows/finalizers,verbs=update
@@ -85,8 +123,9 @@ func (r *DataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		r.mu.Unlock()
 
-		dataflow.Status.Phase = "Stopped"
-		if err := r.Status().Update(ctx, &dataflow); err != nil {
+		if err := r.updateStatusWithRetry(ctx, req, func(df *dataflowv1.DataFlow) {
+			df.Status.Phase = "Stopped"
+		}); err != nil {
 			log.Error(err, "unable to update DataFlow status")
 		}
 		return ctrl.Result{}, nil
@@ -97,10 +136,12 @@ func (r *DataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	resolvedSpec, err := r.secretResolver.ResolveDataFlowSpec(ctx, req.Namespace, &dataflow.Spec)
 	if err != nil {
 		log.Error(err, "failed to resolve secrets")
-		dataflow.Status.Phase = "Error"
-		dataflow.Status.Message = fmt.Sprintf("Failed to resolve secrets: %v", err)
-		if err := r.Status().Update(ctx, &dataflow); err != nil {
-			log.Error(err, "unable to update DataFlow status")
+		updateErr := r.updateStatusWithRetry(ctx, req, func(df *dataflowv1.DataFlow) {
+			df.Status.Phase = "Error"
+			df.Status.Message = fmt.Sprintf("Failed to resolve secrets: %v", err)
+		})
+		if updateErr != nil {
+			log.Error(updateErr, "unable to update DataFlow status")
 		}
 		return ctrl.Result{}, err
 	}
@@ -136,10 +177,12 @@ func (r *DataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		resolvedSpec, err := r.secretResolver.ResolveDataFlowSpec(ctx, req.Namespace, &dataflow.Spec)
 		if err != nil {
 			log.Error(err, "failed to resolve secrets")
-			dataflow.Status.Phase = "Error"
-			dataflow.Status.Message = fmt.Sprintf("Failed to resolve secrets: %v", err)
-			if err := r.Status().Update(ctx, &dataflow); err != nil {
-				log.Error(err, "unable to update DataFlow status")
+			updateErr := r.updateStatusWithRetry(ctx, req, func(df *dataflowv1.DataFlow) {
+				df.Status.Phase = "Error"
+				df.Status.Message = fmt.Sprintf("Failed to resolve secrets: %v", err)
+			})
+			if updateErr != nil {
+				log.Error(updateErr, "unable to update DataFlow status")
 			}
 			return ctrl.Result{}, err
 		}
@@ -148,10 +191,12 @@ func (r *DataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		proc, err := processor.NewProcessorWithLogger(resolvedSpec, log)
 		if err != nil {
 			log.Error(err, "failed to create processor")
-			dataflow.Status.Phase = "Error"
-			dataflow.Status.Message = fmt.Sprintf("Failed to create processor: %v", err)
-			if err := r.Status().Update(ctx, &dataflow); err != nil {
-				log.Error(err, "unable to update DataFlow status")
+			updateErr := r.updateStatusWithRetry(ctx, req, func(df *dataflowv1.DataFlow) {
+				df.Status.Phase = "Error"
+				df.Status.Message = fmt.Sprintf("Failed to create processor: %v", err)
+			})
+			if updateErr != nil {
+				log.Error(updateErr, "unable to update DataFlow status")
 			}
 			return ctrl.Result{}, err
 		}
@@ -228,13 +273,32 @@ func (r *DataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		dataflow.Status.Phase = "Running"
 	}
 
-	// Update status with a separate context to avoid cancellation issues
+	// Update status with retry logic to handle optimistic locking conflicts
+	// Используем отдельный контекст, чтобы избежать проблем с отменой
 	updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := r.Status().Update(updateCtx, &dataflow); err != nil {
+
+	// Сохраняем значения статуса перед обновлением
+	statusPhase := dataflow.Status.Phase
+	statusMessage := dataflow.Status.Message
+	statusProcessedCount := dataflow.Status.ProcessedCount
+	statusErrorCount := dataflow.Status.ErrorCount
+	statusLastProcessedTime := dataflow.Status.LastProcessedTime
+
+	if err := r.updateStatusWithRetry(updateCtx, req, func(df *dataflowv1.DataFlow) {
+		df.Status.Phase = statusPhase
+		df.Status.Message = statusMessage
+		df.Status.ProcessedCount = statusProcessedCount
+		df.Status.ErrorCount = statusErrorCount
+		df.Status.LastProcessedTime = statusLastProcessedTime
+	}); err != nil {
 		log.Error(err, "unable to update DataFlow status")
 		// Don't return error if context was canceled, just log it
 		if err == context.Canceled || err == context.DeadlineExceeded {
+			return ctrl.Result{Requeue: true}, nil
+		}
+		// Если это конфликт, запланируем повторную попытку
+		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, err
