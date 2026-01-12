@@ -72,11 +72,19 @@ func (k *KafkaSourceConnector) Connect(ctx context.Context) error {
 		if k.config.TLS.CAFile != "" {
 			caCert, err := os.ReadFile(k.config.TLS.CAFile)
 			if err != nil {
-				return fmt.Errorf("failed to read CA file: %w", err)
+				return fmt.Errorf("failed to read CA file %s: %w", k.config.TLS.CAFile, err)
 			}
 			caCertPool := x509.NewCertPool()
 			if !caCertPool.AppendCertsFromPEM(caCert) {
-				return fmt.Errorf("failed to parse CA certificate")
+				return fmt.Errorf("failed to parse CA certificate from file %s", k.config.TLS.CAFile)
+			}
+			tlsConfig.RootCAs = caCertPool
+		} else if !k.config.TLS.InsecureSkipVerify {
+			// If no CA file is provided and we're not skipping verification,
+			// use system CA certificates
+			caCertPool, err := x509.SystemCertPool()
+			if err != nil {
+				return fmt.Errorf("failed to load system CA certificates: %w", err)
 			}
 			tlsConfig.RootCAs = caCertPool
 		}
@@ -84,7 +92,7 @@ func (k *KafkaSourceConnector) Connect(ctx context.Context) error {
 		if k.config.TLS.CertFile != "" && k.config.TLS.KeyFile != "" {
 			cert, err := tls.LoadX509KeyPair(k.config.TLS.CertFile, k.config.TLS.KeyFile)
 			if err != nil {
-				return fmt.Errorf("failed to load certificate: %w", err)
+				return fmt.Errorf("failed to load certificate (cert: %s, key: %s): %w", k.config.TLS.CertFile, k.config.TLS.KeyFile, err)
 			}
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
@@ -106,8 +114,8 @@ func (k *KafkaSourceConnector) Connect(ctx context.Context) error {
 		saramaConfig.Net.SASL.Enable = true
 		saramaConfig.Net.SASL.User = k.config.SASL.Username
 		saramaConfig.Net.SASL.Password = k.config.SASL.Password
-		saramaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
 
+		// Set SASL mechanism based on configuration
 		switch k.config.SASL.Mechanism {
 		case "scram-sha-256":
 			saramaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
@@ -119,6 +127,11 @@ func (k *KafkaSourceConnector) Connect(ctx context.Context) error {
 			saramaConfig.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
 				return &XDGSCRAMClient{HashGeneratorFcn: SHA512}
 			}
+		case "plain", "":
+			// Default to plaintext if not specified or explicitly set to plain
+			saramaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		default:
+			return fmt.Errorf("unsupported SASL mechanism: %s (supported: plain, scram-sha-256, scram-sha-512)", k.config.SASL.Mechanism)
 		}
 	}
 
@@ -134,8 +147,23 @@ func (k *KafkaSourceConnector) Connect(ctx context.Context) error {
 
 	consumer, err := sarama.NewConsumerGroup(k.config.Brokers, consumerGroup, saramaConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create consumer group (brokers: %v, group: %s, tls: %v, sasl: %v): %w",
-			k.config.Brokers, consumerGroup, k.config.TLS != nil, k.config.SASL != nil, err)
+		saslMechanism := "none"
+		if k.config.SASL != nil {
+			saslMechanism = k.config.SASL.Mechanism
+			if saslMechanism == "" {
+				saslMechanism = "plain"
+			}
+		}
+		return fmt.Errorf("failed to create consumer group (brokers: %v, group: %s, tls: %v, tlsSkipVerify: %v, sasl: %v, saslMechanism: %s, username: %s): %w",
+			k.config.Brokers, consumerGroup, k.config.TLS != nil,
+			k.config.TLS != nil && k.config.TLS.InsecureSkipVerify,
+			k.config.SASL != nil, saslMechanism,
+			func() string {
+				if k.config.SASL != nil {
+					return k.config.SASL.Username
+				}
+				return ""
+			}(), err)
 	}
 
 	k.consumer = consumer
@@ -277,11 +305,19 @@ func (k *KafkaSinkConnector) Connect(ctx context.Context) error {
 		if k.config.TLS.CAFile != "" {
 			caCert, err := os.ReadFile(k.config.TLS.CAFile)
 			if err != nil {
-				return fmt.Errorf("failed to read CA file: %w", err)
+				return fmt.Errorf("failed to read CA file %s: %w", k.config.TLS.CAFile, err)
 			}
 			caCertPool := x509.NewCertPool()
 			if !caCertPool.AppendCertsFromPEM(caCert) {
-				return fmt.Errorf("failed to parse CA certificate")
+				return fmt.Errorf("failed to parse CA certificate from file %s", k.config.TLS.CAFile)
+			}
+			tlsConfig.RootCAs = caCertPool
+		} else if !k.config.TLS.InsecureSkipVerify {
+			// If no CA file is provided and we're not skipping verification,
+			// use system CA certificates
+			caCertPool, err := x509.SystemCertPool()
+			if err != nil {
+				return fmt.Errorf("failed to load system CA certificates: %w", err)
 			}
 			tlsConfig.RootCAs = caCertPool
 		}
@@ -289,7 +325,7 @@ func (k *KafkaSinkConnector) Connect(ctx context.Context) error {
 		if k.config.TLS.CertFile != "" && k.config.TLS.KeyFile != "" {
 			cert, err := tls.LoadX509KeyPair(k.config.TLS.CertFile, k.config.TLS.KeyFile)
 			if err != nil {
-				return fmt.Errorf("failed to load certificate: %w", err)
+				return fmt.Errorf("failed to load certificate (cert: %s, key: %s): %w", k.config.TLS.CertFile, k.config.TLS.KeyFile, err)
 			}
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
@@ -311,8 +347,8 @@ func (k *KafkaSinkConnector) Connect(ctx context.Context) error {
 		saramaConfig.Net.SASL.Enable = true
 		saramaConfig.Net.SASL.User = k.config.SASL.Username
 		saramaConfig.Net.SASL.Password = k.config.SASL.Password
-		saramaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
 
+		// Set SASL mechanism based on configuration
 		switch k.config.SASL.Mechanism {
 		case "scram-sha-256":
 			saramaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
@@ -324,6 +360,11 @@ func (k *KafkaSinkConnector) Connect(ctx context.Context) error {
 			saramaConfig.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
 				return &XDGSCRAMClient{HashGeneratorFcn: SHA512}
 			}
+		case "plain", "":
+			// Default to plaintext if not specified or explicitly set to plain
+			saramaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		default:
+			return fmt.Errorf("unsupported SASL mechanism: %s (supported: plain, scram-sha-256, scram-sha-512)", k.config.SASL.Mechanism)
 		}
 	}
 
@@ -334,8 +375,23 @@ func (k *KafkaSinkConnector) Connect(ctx context.Context) error {
 
 	producer, err := sarama.NewSyncProducer(k.config.Brokers, saramaConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create producer (brokers: %v, tls: %v, sasl: %v): %w",
-			k.config.Brokers, k.config.TLS != nil, k.config.SASL != nil, err)
+		saslMechanism := "none"
+		if k.config.SASL != nil {
+			saslMechanism = k.config.SASL.Mechanism
+			if saslMechanism == "" {
+				saslMechanism = "plain"
+			}
+		}
+		return fmt.Errorf("failed to create producer (brokers: %v, tls: %v, tlsSkipVerify: %v, sasl: %v, saslMechanism: %s, username: %s): %w",
+			k.config.Brokers, k.config.TLS != nil,
+			k.config.TLS != nil && k.config.TLS.InsecureSkipVerify,
+			k.config.SASL != nil, saslMechanism,
+			func() string {
+				if k.config.SASL != nil {
+					return k.config.SASL.Username
+				}
+				return ""
+			}(), err)
 	}
 
 	k.producer = producer
