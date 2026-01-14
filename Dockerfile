@@ -10,6 +10,9 @@ RUN apk add --no-cache git make
 COPY go.mod go.mod
 COPY go.sum go.sum
 
+# Copy nessie-client directory (required for replace directive)
+COPY pkg/nessie-client/go.mod pkg/nessie-client/go.mod
+
 # Download dependencies
 RUN go mod download
 
