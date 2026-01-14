@@ -9,14 +9,14 @@
 - Kubernetes кластер (версия 1.24+)
 - Helm 3.0+
 - kubectl настроен для работы с кластером
-- Доступ к источникам данных (Kafka, PostgreSQL, RabbitMQ, Iceberg)
+- Доступ к источникам данных (Kafka, PostgreSQL, Iceberg)
 
 ### Для локальной разработки
 
 - Go 1.21+
 - Docker и Docker Compose
 - Make (опционально, для использования Makefile команд)
-- Доступ к портам: 8080, 5050, 15672, 8081, 5432, 9092, 5672
+- Доступ к портам: 8080, 5050, 8081, 5432, 9092
 
 ## Установка
 
@@ -273,7 +273,6 @@ docker-compose up -d
 
 - **Kafka** (порт 9092) с Kafka UI (порт 8080)
 - **PostgreSQL** (порт 5432) с pgAdmin (порт 5050)
-- **RabbitMQ** (порт 5672) с Management UI (порт 15672)
 - **Iceberg REST Catalog** (порт 8181) с UI (порт 8081)
 - **MinIO** (порт 9000, 9001) для хранения данных Iceberg
 
@@ -286,9 +285,6 @@ docker-compose up -d
 - **pgAdmin**: http://localhost:5050
   - Логин: `admin@admin.com`, пароль: `admin`
   - Управление PostgreSQL базами данных
-- **RabbitMQ Management**: http://localhost:15672
-  - Логин: `guest`, пароль: `guest`
-  - Управление очередями и exchanges
 - **Iceberg REST UI**: http://localhost:8081
   - Просмотр таблиц и namespaces
 - **MinIO Console**: http://localhost:9001

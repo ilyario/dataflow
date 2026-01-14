@@ -113,9 +113,9 @@ func (r *SecretResolver) resolveSourceSpec(ctx context.Context, namespace string
 				return err
 			}
 		}
-	case "rabbitmq":
-		if source.RabbitMQ != nil {
-			if err := r.resolveRabbitMQSourceSpec(ctx, namespace, source.RabbitMQ); err != nil {
+	case "nessie":
+		if source.Nessie != nil {
+			if err := r.resolveNessieSourceSpec(ctx, namespace, source.Nessie); err != nil {
 				return err
 			}
 		}
@@ -146,9 +146,9 @@ func (r *SecretResolver) resolveSinkSpec(ctx context.Context, namespace string, 
 				return err
 			}
 		}
-	case "rabbitmq":
-		if sink.RabbitMQ != nil {
-			if err := r.resolveRabbitMQSinkSpec(ctx, namespace, sink.RabbitMQ); err != nil {
+	case "nessie":
+		if sink.Nessie != nil {
+			if err := r.resolveNessieSinkSpec(ctx, namespace, sink.Nessie); err != nil {
 				return err
 			}
 		}
@@ -175,12 +175,6 @@ func (r *SecretResolver) resolveSinkSpec(ctx context.Context, namespace string, 
 				case "iceberg":
 					if routeSink.Iceberg != nil {
 						if err := r.resolveIcebergSinkSpec(ctx, namespace, routeSink.Iceberg); err != nil {
-							return err
-						}
-					}
-				case "rabbitmq":
-					if routeSink.RabbitMQ != nil {
-						if err := r.resolveRabbitMQSinkSpec(ctx, namespace, routeSink.RabbitMQ); err != nil {
 							return err
 						}
 					}
@@ -233,6 +227,53 @@ func (r *SecretResolver) resolveKafkaSourceSpec(ctx context.Context, namespace s
 
 	if spec.SASL != nil {
 		if err := r.resolveSASLConfig(ctx, namespace, spec.SASL); err != nil {
+			return err
+		}
+	}
+
+	// Resolve Schema Registry secrets
+	if spec.SchemaRegistry != nil {
+		if err := r.resolveSchemaRegistryConfig(ctx, namespace, spec.SchemaRegistry); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// resolveSchemaRegistryConfig resolves secrets for Schema Registry configuration
+func (r *SecretResolver) resolveSchemaRegistryConfig(ctx context.Context, namespace string, config *dataflowv1.SchemaRegistryConfig) error {
+	// Resolve URL from secret if provided
+	if config.URLSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, config.URLSecretRef)
+		if err != nil {
+			return err
+		}
+		config.URL = value
+	}
+
+	// Resolve BasicAuth secrets if provided
+	if config.BasicAuth != nil {
+		if config.BasicAuth.UsernameSecretRef != nil {
+			value, err := r.ResolveSecretValue(ctx, namespace, config.BasicAuth.UsernameSecretRef)
+			if err != nil {
+				return err
+			}
+			config.BasicAuth.Username = value
+		}
+
+		if config.BasicAuth.PasswordSecretRef != nil {
+			value, err := r.ResolveSecretValue(ctx, namespace, config.BasicAuth.PasswordSecretRef)
+			if err != nil {
+				return err
+			}
+			config.BasicAuth.Password = value
+		}
+	}
+
+	// Resolve TLS config if provided
+	if config.TLS != nil {
+		if err := r.resolveTLSConfig(ctx, namespace, config.TLS); err != nil {
 			return err
 		}
 	}
@@ -348,9 +389,49 @@ func (r *SecretResolver) resolveIcebergSourceSpec(ctx context.Context, namespace
 	if spec.TokenSecretRef != nil {
 		value, err := r.ResolveSecretValue(ctx, namespace, spec.TokenSecretRef)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to resolve token from secret %s/%s key %s: %w",
+				spec.TokenSecretRef.Namespace, spec.TokenSecretRef.Name, spec.TokenSecretRef.Key, err)
+		}
+		if value == "" {
+			return fmt.Errorf("token from secret %s/%s key %s is empty",
+				spec.TokenSecretRef.Namespace, spec.TokenSecretRef.Name, spec.TokenSecretRef.Key)
 		}
 		spec.Token = value
+	}
+
+	// Resolve AWS credentials from secrets
+	if spec.AWSRegionSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSRegionSecretRef)
+		if err != nil {
+			return err
+		}
+		// Store in a temporary field or set as environment variable
+		// We'll set it as environment variable in the connector
+		os.Setenv("AWS_REGION", value)
+	}
+
+	if spec.AWSAccessKeyIDSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSAccessKeyIDSecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_ACCESS_KEY_ID", value)
+	}
+
+	if spec.AWSSecretAccessKeySecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSSecretAccessKeySecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_SECRET_ACCESS_KEY", value)
+	}
+
+	if spec.AWSEndpointURLSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSEndpointURLSecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_ENDPOINT_URL_S3", value)
 	}
 
 	return nil
@@ -384,81 +465,47 @@ func (r *SecretResolver) resolveIcebergSinkSpec(ctx context.Context, namespace s
 	if spec.TokenSecretRef != nil {
 		value, err := r.ResolveSecretValue(ctx, namespace, spec.TokenSecretRef)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to resolve token from secret %s/%s key %s: %w",
+				spec.TokenSecretRef.Namespace, spec.TokenSecretRef.Name, spec.TokenSecretRef.Key, err)
+		}
+		if value == "" {
+			return fmt.Errorf("token from secret %s/%s key %s is empty",
+				spec.TokenSecretRef.Namespace, spec.TokenSecretRef.Name, spec.TokenSecretRef.Key)
 		}
 		spec.Token = value
 	}
 
-	return nil
-}
-
-func (r *SecretResolver) resolveRabbitMQSourceSpec(ctx context.Context, namespace string, spec *dataflowv1.RabbitMQSourceSpec) error {
-	if spec.URLSecretRef != nil {
-		value, err := r.ResolveSecretValue(ctx, namespace, spec.URLSecretRef)
+	// Resolve AWS credentials from secrets
+	if spec.AWSRegionSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSRegionSecretRef)
 		if err != nil {
 			return err
 		}
-		spec.URL = value
+		os.Setenv("AWS_REGION", value)
 	}
 
-	if spec.QueueSecretRef != nil {
-		value, err := r.ResolveSecretValue(ctx, namespace, spec.QueueSecretRef)
+	if spec.AWSAccessKeyIDSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSAccessKeyIDSecretRef)
 		if err != nil {
 			return err
 		}
-		spec.Queue = value
+		os.Setenv("AWS_ACCESS_KEY_ID", value)
 	}
 
-	if spec.ExchangeSecretRef != nil {
-		value, err := r.ResolveSecretValue(ctx, namespace, spec.ExchangeSecretRef)
+	if spec.AWSSecretAccessKeySecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSSecretAccessKeySecretRef)
 		if err != nil {
 			return err
 		}
-		spec.Exchange = value
+		os.Setenv("AWS_SECRET_ACCESS_KEY", value)
 	}
 
-	if spec.RoutingKeySecretRef != nil {
-		value, err := r.ResolveSecretValue(ctx, namespace, spec.RoutingKeySecretRef)
+	if spec.AWSEndpointURLSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSEndpointURLSecretRef)
 		if err != nil {
 			return err
 		}
-		spec.RoutingKey = value
-	}
-
-	return nil
-}
-
-func (r *SecretResolver) resolveRabbitMQSinkSpec(ctx context.Context, namespace string, spec *dataflowv1.RabbitMQSinkSpec) error {
-	if spec.URLSecretRef != nil {
-		value, err := r.ResolveSecretValue(ctx, namespace, spec.URLSecretRef)
-		if err != nil {
-			return err
-		}
-		spec.URL = value
-	}
-
-	if spec.ExchangeSecretRef != nil {
-		value, err := r.ResolveSecretValue(ctx, namespace, spec.ExchangeSecretRef)
-		if err != nil {
-			return err
-		}
-		spec.Exchange = value
-	}
-
-	if spec.RoutingKeySecretRef != nil {
-		value, err := r.ResolveSecretValue(ctx, namespace, spec.RoutingKeySecretRef)
-		if err != nil {
-			return err
-		}
-		spec.RoutingKey = value
-	}
-
-	if spec.QueueSecretRef != nil {
-		value, err := r.ResolveSecretValue(ctx, namespace, spec.QueueSecretRef)
-		if err != nil {
-			return err
-		}
-		spec.Queue = value
+		os.Setenv("AWS_ENDPOINT_URL_S3", value)
 	}
 
 	return nil
@@ -535,17 +582,24 @@ func (r *SecretResolver) resolveTLSConfig(ctx context.Context, namespace string,
 	if config.CASecretRef != nil {
 		value, err := r.ResolveSecretValue(ctx, namespace, config.CASecretRef)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to resolve CA secret %s/%s key %s: %w",
+				config.CASecretRef.Namespace, config.CASecretRef.Name, config.CASecretRef.Key, err)
 		}
+		// Check if value is certificate content
+		isContent := isCertificateContent(value)
 		// Check if value is a file path or CA certificate content
 		// If it starts with -----BEGIN, it's CA certificate content
-		if isCertificateContent(value) {
+		if isContent {
 			// Value is CA certificate content, create temporary file
 			tempFile, err := r.createTempFile("ca-", []byte(value))
 			if err != nil {
 				return fmt.Errorf("failed to create temporary CA file: %w", err)
 			}
 			config.CAFile = tempFile
+			// Log successful creation
+			if stat, err := os.Stat(tempFile); err == nil {
+				_ = stat // File exists and has size
+			}
 		} else {
 			// Check if it's a valid file path
 			if _, err := os.Stat(value); err == nil {
@@ -558,6 +612,14 @@ func (r *SecretResolver) resolveTLSConfig(ctx context.Context, namespace string,
 					return fmt.Errorf("failed to create temporary CA file: %w", err)
 				}
 				config.CAFile = tempFile
+			}
+		}
+		// Verify file exists and is readable
+		if config.CAFile != "" {
+			if stat, err := os.Stat(config.CAFile); err != nil {
+				return fmt.Errorf("CA file %s does not exist or is not readable: %w", config.CAFile, err)
+			} else if stat.Size() == 0 {
+				return fmt.Errorf("CA file %s is empty", config.CAFile)
 			}
 		}
 	}
@@ -637,6 +699,170 @@ func (r *SecretResolver) resolveSASLConfig(ctx context.Context, namespace string
 			return err
 		}
 		config.Password = value
+	}
+
+	return nil
+}
+
+func (r *SecretResolver) resolveNessieSourceSpec(ctx context.Context, namespace string, spec *dataflowv1.NessieSourceSpec) error {
+	if spec.NessieURLSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.NessieURLSecretRef)
+		if err != nil {
+			return err
+		}
+		spec.NessieURL = value
+	}
+
+	if spec.BranchSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.BranchSecretRef)
+		if err != nil {
+			return err
+		}
+		spec.Branch = value
+	}
+
+	if spec.NamespaceSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.NamespaceSecretRef)
+		if err != nil {
+			return err
+		}
+		spec.Namespace = value
+	}
+
+	if spec.TableSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.TableSecretRef)
+		if err != nil {
+			return err
+		}
+		spec.Table = value
+	}
+
+	if spec.TokenSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.TokenSecretRef)
+		if err != nil {
+			return fmt.Errorf("failed to resolve token from secret %s/%s key %s: %w",
+				spec.TokenSecretRef.Namespace, spec.TokenSecretRef.Name, spec.TokenSecretRef.Key, err)
+		}
+		if value == "" {
+			return fmt.Errorf("token from secret %s/%s key %s is empty",
+				spec.TokenSecretRef.Namespace, spec.TokenSecretRef.Name, spec.TokenSecretRef.Key)
+		}
+		spec.Token = value
+	}
+
+	// Resolve AWS credentials from secrets
+	if spec.AWSRegionSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSRegionSecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_REGION", value)
+	}
+
+	if spec.AWSAccessKeyIDSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSAccessKeyIDSecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_ACCESS_KEY_ID", value)
+	}
+
+	if spec.AWSSecretAccessKeySecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSSecretAccessKeySecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_SECRET_ACCESS_KEY", value)
+	}
+
+	if spec.AWSEndpointURLSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSEndpointURLSecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_ENDPOINT_URL_S3", value)
+	}
+
+	return nil
+}
+
+func (r *SecretResolver) resolveNessieSinkSpec(ctx context.Context, namespace string, spec *dataflowv1.NessieSinkSpec) error {
+	if spec.NessieURLSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.NessieURLSecretRef)
+		if err != nil {
+			return err
+		}
+		spec.NessieURL = value
+	}
+
+	if spec.BranchSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.BranchSecretRef)
+		if err != nil {
+			return err
+		}
+		spec.Branch = value
+	}
+
+	if spec.NamespaceSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.NamespaceSecretRef)
+		if err != nil {
+			return err
+		}
+		spec.Namespace = value
+	}
+
+	if spec.TableSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.TableSecretRef)
+		if err != nil {
+			return err
+		}
+		spec.Table = value
+	}
+
+	if spec.TokenSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.TokenSecretRef)
+		if err != nil {
+			return fmt.Errorf("failed to resolve token from secret %s/%s key %s: %w",
+				spec.TokenSecretRef.Namespace, spec.TokenSecretRef.Name, spec.TokenSecretRef.Key, err)
+		}
+		if value == "" {
+			return fmt.Errorf("token from secret %s/%s key %s is empty",
+				spec.TokenSecretRef.Namespace, spec.TokenSecretRef.Name, spec.TokenSecretRef.Key)
+		}
+		spec.Token = value
+	}
+
+	// Resolve AWS credentials from secrets
+	if spec.AWSRegionSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSRegionSecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_REGION", value)
+	}
+
+	if spec.AWSAccessKeyIDSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSAccessKeyIDSecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_ACCESS_KEY_ID", value)
+	}
+
+	if spec.AWSSecretAccessKeySecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSSecretAccessKeySecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_SECRET_ACCESS_KEY", value)
+	}
+
+	if spec.AWSEndpointURLSecretRef != nil {
+		value, err := r.ResolveSecretValue(ctx, namespace, spec.AWSEndpointURLSecretRef)
+		if err != nil {
+			return err
+		}
+		os.Setenv("AWS_ENDPOINT_URL_S3", value)
 	}
 
 	return nil

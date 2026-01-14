@@ -1,10 +1,10 @@
 # DataFlow Operator
 
-Kubernetes operator for streaming data between different sources (Kafka, PostgreSQL, Iceberg, RabbitMQ) with support for message transformations.
+Kubernetes operator for streaming data between different sources (Kafka, PostgreSQL, Iceberg) with support for message transformations.
 
 ## Features
 
-- **Multiple Data Sources**: Kafka, PostgreSQL, Iceberg, RabbitMQ
+- **Multiple Data Sources**: Kafka, PostgreSQL, Iceberg
 - **Message Transformations**:
   - Timestamp - add timestamp to messages
   - Flatten - expand arrays into separate messages
@@ -95,7 +95,6 @@ docker-compose up -d
 Available UIs:
 - **Kafka UI**: http://localhost:8080
 - **pgAdmin**: http://localhost:5050 (admin@admin.com / admin)
-- **RabbitMQ Management**: http://localhost:15672 (guest / guest)
 - **Iceberg REST UI**: http://localhost:8081
 
 2. Run the operator:

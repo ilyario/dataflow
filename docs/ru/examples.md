@@ -229,38 +229,6 @@ spec:
 }
 ```
 
-## RabbitMQ → Iceberg
-
-Пример передачи данных из RabbitMQ очереди в Apache Iceberg таблицу.
-
-```yaml
-apiVersion: dataflow.dataflow.io/v1
-kind: DataFlow
-metadata:
-  name: rabbitmq-to-iceberg
-spec:
-  source:
-    type: rabbitmq
-    rabbitmq:
-      url: "amqp://guest:guest@localhost:5672/"
-      queue: data-queue
-      exchange: data-exchange
-      routingKey: data.*
-  sink:
-    type: iceberg
-    iceberg:
-      restCatalogUrl: "http://iceberg-rest:8181"
-      namespace: analytics
-      table: events
-      token: "your-token"
-      autoCreateNamespace: true
-      autoCreateTable: true
-  transformations:
-    - type: timestamp
-      timestamp:
-        fieldName: ingested_at
-```
-
 ## PostgreSQL → Kafka с выбором полей
 
 Пример чтения из PostgreSQL, выборки определенных полей и отправки в Kafka.
@@ -452,19 +420,7 @@ spec:
         keepLength: true
 ```
 
-## RabbitMQ → PostgreSQL с фильтрацией
-
-Пример чтения из RabbitMQ, фильтрации и записи в PostgreSQL.
-
-```yaml
-apiVersion: dataflow.dataflow.io/v1
-kind: DataFlow
-metadata:
-  name: rabbitmq-to-postgres
-spec:
-  source:
-    type: rabbitmq
-    rabbitmq:
+## Использование Secrets для credentials
       url: "amqp://guest:guest@localhost:5672/"
       queue: events-queue
       exchange: events-exchange
@@ -699,7 +655,6 @@ status:
 ### Надежность
 
 - Настройте правильные consumer groups для Kafka
-- Используйте persistent queues для RabbitMQ
 - Мониторьте статус DataFlow ресурсов
 
 ## Дополнительные примеры

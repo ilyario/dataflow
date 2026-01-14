@@ -53,10 +53,20 @@ func NewProcessorWithLogger(spec *v1.DataFlowSpec, logger logr.Logger) (*Process
 		return nil, fmt.Errorf("failed to create source connector: %w", err)
 	}
 
+	// Set logger if connector supports it
+	if loggerConnector, ok := source.(interface{ SetLogger(logr.Logger) }); ok {
+		loggerConnector.SetLogger(logger)
+	}
+
 	// Create sink connector
 	sink, err := connectors.CreateSinkConnector(&spec.Sink)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sink connector: %w", err)
+	}
+
+	// Set logger if connector supports it
+	if loggerConnector, ok := sink.(interface{ SetLogger(logr.Logger) }); ok {
+		loggerConnector.SetLogger(logger)
 	}
 
 	// Create transformers

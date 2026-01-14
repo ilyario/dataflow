@@ -6,7 +6,7 @@
 
 - Docker должен быть запущен и доступен
 - Go 1.21+
-- Достаточно ресурсов для запуска контейнеров (Kafka, PostgreSQL, RabbitMQ)
+- Достаточно ресурсов для запуска контейнеров (Kafka, PostgreSQL)
 
 ## Запуск тестов
 
@@ -43,7 +43,6 @@ go test ./test/integration/... -v
 # Только тесты коннекторов
 go test ./test/integration/... -v -run TestKafkaConnectorIntegration
 go test ./test/integration/... -v -run TestPostgreSQLConnectorIntegration
-go test ./test/integration/... -v -run TestRabbitMQConnectorIntegration
 
 # Только тесты трансформеров
 go test ./test/integration/... -v -run TestTransformersIntegration
@@ -61,10 +60,6 @@ go test ./test/integration/... -v -run TestTransformersChainIntegration
 #### PostgreSQL
 - ✅ Source коннектор: чтение данных из таблицы PostgreSQL
 - ✅ Sink коннектор: запись данных в таблицу PostgreSQL
-
-#### RabbitMQ
-- ✅ Source коннектор: чтение сообщений из RabbitMQ очереди
-- ✅ Sink коннектор: запись сообщений в RabbitMQ exchange
 
 ### Трансформеры
 

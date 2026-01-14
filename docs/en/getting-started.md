@@ -9,7 +9,7 @@ This guide will help you get started with DataFlow Operator. You'll learn how to
 - Kubernetes cluster (version 1.24+)
 - Helm 3.0+
 - kubectl configured to work with the cluster
-- Access to data sources (Kafka, PostgreSQL, RabbitMQ, Iceberg)
+- Access to data sources (Kafka, PostgreSQL, Iceberg)
 
 ### For Local Development
 
@@ -287,7 +287,6 @@ This command will start:
 
 - **Kafka** (port 9092) with Kafka UI (port 8080)
 - **PostgreSQL** (port 5432) with pgAdmin (port 5050)
-- **RabbitMQ** (port 5672) with Management UI (port 15672)
 - **Iceberg REST Catalog** (port 8181) with UI (port 8081)
 - **MinIO** (ports 9000, 9001) for Iceberg data storage
 
@@ -300,8 +299,6 @@ After starting, the following UIs are available:
 - **pgAdmin**: http://localhost:5050
   - Login: `admin@admin.com`, password: `admin`
   - PostgreSQL database management
-- **RabbitMQ Management**: http://localhost:15672
-  - Login: `guest`, password: `guest`
   - Queue and exchange management
 - **Iceberg REST UI**: http://localhost:8081
   - View tables and namespaces

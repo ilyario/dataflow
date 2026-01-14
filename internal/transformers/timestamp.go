@@ -55,7 +55,9 @@ func (t *TimestampTransformer) Transform(ctx context.Context, message *types.Mes
 	// Parse JSON and add timestamp field
 	var data map[string]interface{}
 	if err := json.Unmarshal(message.Data, &data); err != nil {
-		return nil, err
+		// Если данные не являются валидным JSON, возвращаем исходное сообщение без изменений
+		// Это позволяет обрабатывать бинарные данные или другие форматы
+		return []*types.Message{message}, nil
 	}
 
 	data[fieldName] = timestamp

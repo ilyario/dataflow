@@ -35,7 +35,7 @@ type DataFlowSpec struct {
 
 // SourceSpec defines the source configuration
 type SourceSpec struct {
-	// Type of source: kafka, postgresql, iceberg, rabbitmq
+	// Type of source: kafka, postgresql, iceberg, nessie
 	Type string `json:"type"`
 
 	// Kafka source configuration
@@ -50,9 +50,9 @@ type SourceSpec struct {
 	// +optional
 	Iceberg *IcebergSourceSpec `json:"iceberg,omitempty"`
 
-	// RabbitMQ source configuration
+	// Nessie source configuration
 	// +optional
-	RabbitMQ *RabbitMQSourceSpec `json:"rabbitmq,omitempty"`
+	Nessie *NessieSourceSpec `json:"nessie,omitempty"`
 }
 
 // KafkaSourceSpec defines Kafka source configuration
@@ -86,6 +86,63 @@ type KafkaSourceSpec struct {
 	// ConsumerGroupSecretRef references a Kubernetes secret for consumer group
 	// +optional
 	ConsumerGroupSecretRef *SecretRef `json:"consumerGroupSecretRef,omitempty"`
+
+	// Format specifies the message format: "json" (default) or "avro"
+	// +optional
+	Format string `json:"format,omitempty"`
+
+	// AvroSchema is the Avro schema as JSON string (required if format is "avro")
+	// +optional
+	AvroSchema string `json:"avroSchema,omitempty"`
+
+	// AvroSchemaFile is the path to a file containing the Avro schema (alternative to avroSchema)
+	// +optional
+	AvroSchemaFile string `json:"avroSchemaFile,omitempty"`
+
+	// AvroSchemaSecretRef references a Kubernetes secret for Avro schema
+	// +optional
+	AvroSchemaSecretRef *SecretRef `json:"avroSchemaSecretRef,omitempty"`
+
+	// SchemaRegistry configuration for Confluent Schema Registry
+	// +optional
+	SchemaRegistry *SchemaRegistryConfig `json:"schemaRegistry,omitempty"`
+}
+
+// SchemaRegistryConfig defines Confluent Schema Registry configuration
+type SchemaRegistryConfig struct {
+	// URL is the Schema Registry base URL (e.g., http://localhost:8081)
+	URL string `json:"url"`
+
+	// BasicAuth configuration
+	// +optional
+	BasicAuth *BasicAuthConfig `json:"basicAuth,omitempty"`
+
+	// TLS configuration for Schema Registry
+	// +optional
+	TLS *TLSConfig `json:"tls,omitempty"`
+
+	// URLSecretRef references a Kubernetes secret for Schema Registry URL
+	// +optional
+	URLSecretRef *SecretRef `json:"urlSecretRef,omitempty"`
+}
+
+// BasicAuthConfig defines basic authentication configuration
+type BasicAuthConfig struct {
+	// Username for basic authentication (optional if UsernameSecretRef is provided)
+	// +optional
+	Username string `json:"username,omitempty"`
+
+	// Password for basic authentication (optional if PasswordSecretRef is provided)
+	// +optional
+	Password string `json:"password,omitempty"`
+
+	// UsernameSecretRef references a Kubernetes secret for username
+	// +optional
+	UsernameSecretRef *SecretRef `json:"usernameSecretRef,omitempty"`
+
+	// PasswordSecretRef references a Kubernetes secret for password
+	// +optional
+	PasswordSecretRef *SecretRef `json:"passwordSecretRef,omitempty"`
 }
 
 // PostgreSQLSourceSpec defines PostgreSQL source configuration
@@ -118,6 +175,11 @@ type IcebergSourceSpec struct {
 	// RESTCatalogURL is the URL of the Iceberg REST Catalog
 	RESTCatalogURL string `json:"restCatalogUrl"`
 
+	// CatalogName is the name of the catalog to use
+	// If not specified, defaults to "iceberg"
+	// +optional
+	CatalogName string `json:"catalogName,omitempty"`
+
 	// Namespace in the catalog
 	Namespace string `json:"namespace"`
 
@@ -143,44 +205,83 @@ type IcebergSourceSpec struct {
 	// TokenSecretRef references a Kubernetes secret for authentication token
 	// +optional
 	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
+
+	// AWSRegionSecretRef references a Kubernetes secret for AWS region
+	// +optional
+	AWSRegionSecretRef *SecretRef `json:"awsRegionSecretRef,omitempty"`
+
+	// AWSAccessKeyIDSecretRef references a Kubernetes secret for AWS access key ID
+	// +optional
+	AWSAccessKeyIDSecretRef *SecretRef `json:"awsAccessKeyIDSecretRef,omitempty"`
+
+	// AWSSecretAccessKeySecretRef references a Kubernetes secret for AWS secret access key
+	// +optional
+	AWSSecretAccessKeySecretRef *SecretRef `json:"awsSecretAccessKeySecretRef,omitempty"`
+
+	// AWSEndpointURLSecretRef references a Kubernetes secret for AWS S3 endpoint URL (for MinIO)
+	// +optional
+	AWSEndpointURLSecretRef *SecretRef `json:"awsEndpointURLSecretRef,omitempty"`
 }
 
-// RabbitMQSourceSpec defines RabbitMQ source configuration
-type RabbitMQSourceSpec struct {
-	// URL connection string for RabbitMQ
-	URL string `json:"url"`
+// NessieSourceSpec defines Nessie source configuration
+type NessieSourceSpec struct {
+	// NessieURL is the URL of the Nessie server
+	NessieURL string `json:"nessieUrl"`
 
-	// Queue name to consume from
-	Queue string `json:"queue"`
-
-	// Exchange name (optional)
+	// Branch is the Nessie branch to read from (defaults to "main")
 	// +optional
-	Exchange string `json:"exchange,omitempty"`
+	Branch string `json:"branch,omitempty"`
 
-	// RoutingKey (optional)
-	// +optional
-	RoutingKey string `json:"routingKey,omitempty"`
+	// Namespace in the catalog
+	Namespace string `json:"namespace"`
 
-	// URLSecretRef references a Kubernetes secret for connection URL
-	// +optional
-	URLSecretRef *SecretRef `json:"urlSecretRef,omitempty"`
+	// Table name
+	Table string `json:"table"`
 
-	// QueueSecretRef references a Kubernetes secret for queue name
+	// Authentication token
 	// +optional
-	QueueSecretRef *SecretRef `json:"queueSecretRef,omitempty"`
+	Token string `json:"token,omitempty"`
 
-	// ExchangeSecretRef references a Kubernetes secret for exchange name
+	// NessieURLSecretRef references a Kubernetes secret for Nessie URL
 	// +optional
-	ExchangeSecretRef *SecretRef `json:"exchangeSecretRef,omitempty"`
+	NessieURLSecretRef *SecretRef `json:"nessieUrlSecretRef,omitempty"`
 
-	// RoutingKeySecretRef references a Kubernetes secret for routing key
+	// BranchSecretRef references a Kubernetes secret for branch name
 	// +optional
-	RoutingKeySecretRef *SecretRef `json:"routingKeySecretRef,omitempty"`
+	BranchSecretRef *SecretRef `json:"branchSecretRef,omitempty"`
+
+	// NamespaceSecretRef references a Kubernetes secret for namespace
+	// +optional
+	NamespaceSecretRef *SecretRef `json:"namespaceSecretRef,omitempty"`
+
+	// TableSecretRef references a Kubernetes secret for table name
+	// +optional
+	TableSecretRef *SecretRef `json:"tableSecretRef,omitempty"`
+
+	// TokenSecretRef references a Kubernetes secret for authentication token
+	// +optional
+	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
+
+	// AWSRegionSecretRef references a Kubernetes secret for AWS region
+	// +optional
+	AWSRegionSecretRef *SecretRef `json:"awsRegionSecretRef,omitempty"`
+
+	// AWSAccessKeyIDSecretRef references a Kubernetes secret for AWS access key ID
+	// +optional
+	AWSAccessKeyIDSecretRef *SecretRef `json:"awsAccessKeyIDSecretRef,omitempty"`
+
+	// AWSSecretAccessKeySecretRef references a Kubernetes secret for AWS secret access key
+	// +optional
+	AWSSecretAccessKeySecretRef *SecretRef `json:"awsSecretAccessKeySecretRef,omitempty"`
+
+	// AWSEndpointURLSecretRef references a Kubernetes secret for AWS S3 endpoint URL (for MinIO)
+	// +optional
+	AWSEndpointURLSecretRef *SecretRef `json:"awsEndpointURLSecretRef,omitempty"`
 }
 
 // SinkSpec defines the sink configuration
 type SinkSpec struct {
-	// Type of sink: kafka, postgresql, iceberg, rabbitmq
+	// Type of sink: kafka, postgresql, iceberg, nessie
 	Type string `json:"type"`
 
 	// Kafka sink configuration
@@ -195,9 +296,9 @@ type SinkSpec struct {
 	// +optional
 	Iceberg *IcebergSinkSpec `json:"iceberg,omitempty"`
 
-	// RabbitMQ sink configuration
+	// Nessie sink configuration
 	// +optional
-	RabbitMQ *RabbitMQSinkSpec `json:"rabbitmq,omitempty"`
+	Nessie *NessieSinkSpec `json:"nessie,omitempty"`
 }
 
 // KafkaSinkSpec defines Kafka sink configuration
@@ -255,6 +356,11 @@ type IcebergSinkSpec struct {
 	// RESTCatalogURL is the URL of the Iceberg REST Catalog
 	RESTCatalogURL string `json:"restCatalogUrl"`
 
+	// CatalogName is the name of the catalog to use
+	// If not specified, defaults to "iceberg"
+	// +optional
+	CatalogName string `json:"catalogName,omitempty"`
+
 	// Namespace in the catalog
 	Namespace string `json:"namespace"`
 
@@ -289,38 +395,87 @@ type IcebergSinkSpec struct {
 	// TokenSecretRef references a Kubernetes secret for authentication token
 	// +optional
 	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
+
+	// AWSRegionSecretRef references a Kubernetes secret for AWS region
+	// +optional
+	AWSRegionSecretRef *SecretRef `json:"awsRegionSecretRef,omitempty"`
+
+	// AWSAccessKeyIDSecretRef references a Kubernetes secret for AWS access key ID
+	// +optional
+	AWSAccessKeyIDSecretRef *SecretRef `json:"awsAccessKeyIDSecretRef,omitempty"`
+
+	// AWSSecretAccessKeySecretRef references a Kubernetes secret for AWS secret access key
+	// +optional
+	AWSSecretAccessKeySecretRef *SecretRef `json:"awsSecretAccessKeySecretRef,omitempty"`
+
+	// AWSEndpointURLSecretRef references a Kubernetes secret for AWS S3 endpoint URL (for MinIO)
+	// +optional
+	AWSEndpointURLSecretRef *SecretRef `json:"awsEndpointURLSecretRef,omitempty"`
 }
 
-// RabbitMQSinkSpec defines RabbitMQ sink configuration
-type RabbitMQSinkSpec struct {
-	// URL connection string for RabbitMQ
-	URL string `json:"url"`
+// NessieSinkSpec defines Nessie sink configuration
+type NessieSinkSpec struct {
+	// NessieURL is the URL of the Nessie server
+	NessieURL string `json:"nessieUrl"`
 
-	// Exchange name
-	Exchange string `json:"exchange"`
-
-	// RoutingKey
-	RoutingKey string `json:"routingKey"`
-
-	// Queue name (optional, for direct queue publishing)
+	// Branch is the Nessie branch to write to (defaults to "main")
 	// +optional
-	Queue string `json:"queue,omitempty"`
+	Branch string `json:"branch,omitempty"`
 
-	// URLSecretRef references a Kubernetes secret for connection URL
-	// +optional
-	URLSecretRef *SecretRef `json:"urlSecretRef,omitempty"`
+	// Namespace in the catalog
+	Namespace string `json:"namespace"`
 
-	// ExchangeSecretRef references a Kubernetes secret for exchange name
-	// +optional
-	ExchangeSecretRef *SecretRef `json:"exchangeSecretRef,omitempty"`
+	// Table name
+	Table string `json:"table"`
 
-	// RoutingKeySecretRef references a Kubernetes secret for routing key
+	// Authentication token
 	// +optional
-	RoutingKeySecretRef *SecretRef `json:"routingKeySecretRef,omitempty"`
+	Token string `json:"token,omitempty"`
 
-	// QueueSecretRef references a Kubernetes secret for queue name
+	// AutoCreateNamespace automatically creates the namespace if it doesn't exist
+	// Defaults to true if not specified
 	// +optional
-	QueueSecretRef *SecretRef `json:"queueSecretRef,omitempty"`
+	AutoCreateNamespace *bool `json:"autoCreateNamespace,omitempty"`
+
+	// AutoCreateTable automatically creates the table if it doesn't exist
+	// +optional
+	AutoCreateTable *bool `json:"autoCreateTable,omitempty"`
+
+	// NessieURLSecretRef references a Kubernetes secret for Nessie URL
+	// +optional
+	NessieURLSecretRef *SecretRef `json:"nessieUrlSecretRef,omitempty"`
+
+	// BranchSecretRef references a Kubernetes secret for branch name
+	// +optional
+	BranchSecretRef *SecretRef `json:"branchSecretRef,omitempty"`
+
+	// NamespaceSecretRef references a Kubernetes secret for namespace
+	// +optional
+	NamespaceSecretRef *SecretRef `json:"namespaceSecretRef,omitempty"`
+
+	// TableSecretRef references a Kubernetes secret for table name
+	// +optional
+	TableSecretRef *SecretRef `json:"tableSecretRef,omitempty"`
+
+	// TokenSecretRef references a Kubernetes secret for authentication token
+	// +optional
+	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
+
+	// AWSRegionSecretRef references a Kubernetes secret for AWS region
+	// +optional
+	AWSRegionSecretRef *SecretRef `json:"awsRegionSecretRef,omitempty"`
+
+	// AWSAccessKeyIDSecretRef references a Kubernetes secret for AWS access key ID
+	// +optional
+	AWSAccessKeyIDSecretRef *SecretRef `json:"awsAccessKeyIDSecretRef,omitempty"`
+
+	// AWSSecretAccessKeySecretRef references a Kubernetes secret for AWS secret access key
+	// +optional
+	AWSSecretAccessKeySecretRef *SecretRef `json:"awsSecretAccessKeySecretRef,omitempty"`
+
+	// AWSEndpointURLSecretRef references a Kubernetes secret for AWS S3 endpoint URL (for MinIO)
+	// +optional
+	AWSEndpointURLSecretRef *SecretRef `json:"awsEndpointURLSecretRef,omitempty"`
 }
 
 // SecretRef references a Kubernetes secret
@@ -372,11 +527,13 @@ type SASLConfig struct {
 	// Mechanism: plain, scram-sha-256, scram-sha-512
 	Mechanism string `json:"mechanism"`
 
-	// Username
-	Username string `json:"username"`
+	// Username (optional if UsernameSecretRef is provided)
+	// +optional
+	Username string `json:"username,omitempty"`
 
-	// Password
-	Password string `json:"password"`
+	// Password (optional if PasswordSecretRef is provided)
+	// +optional
+	Password string `json:"password,omitempty"`
 
 	// UsernameSecretRef references a Kubernetes secret for username
 	// +optional
@@ -389,7 +546,7 @@ type SASLConfig struct {
 
 // TransformationSpec defines a transformation to apply
 type TransformationSpec struct {
-	// Type of transformation: timestamp, flatten, filter, mask, router, select, remove
+	// Type of transformation: timestamp, flatten, filter, mask, router, select, remove, snakeCase, camelCase
 	Type string `json:"type"`
 
 	// Timestamp transformation configuration
@@ -419,6 +576,14 @@ type TransformationSpec struct {
 	// Remove transformation configuration
 	// +optional
 	Remove *RemoveTransformation `json:"remove,omitempty"`
+
+	// SnakeCase transformation configuration
+	// +optional
+	SnakeCase *SnakeCaseTransformation `json:"snakeCase,omitempty"`
+
+	// CamelCase transformation configuration
+	// +optional
+	CamelCase *CamelCaseTransformation `json:"camelCase,omitempty"`
 }
 
 // TimestampTransformation adds a timestamp field
@@ -483,6 +648,20 @@ type SelectTransformation struct {
 type RemoveTransformation struct {
 	// Fields is a list of JSONPath expressions to remove
 	Fields []string `json:"fields"`
+}
+
+// SnakeCaseTransformation converts field names to snake_case
+type SnakeCaseTransformation struct {
+	// Deep indicates whether to convert nested objects recursively
+	// +optional
+	Deep bool `json:"deep,omitempty"`
+}
+
+// CamelCaseTransformation converts field names to CamelCase
+type CamelCaseTransformation struct {
+	// Deep indicates whether to convert nested objects recursively
+	// +optional
+	Deep bool `json:"deep,omitempty"`
 }
 
 // DataFlowStatus defines the observed state of DataFlow

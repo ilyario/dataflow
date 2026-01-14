@@ -40,11 +40,11 @@ func CreateSourceConnector(source *v1.SourceSpec) (SourceConnector, error) {
 			return nil, fmt.Errorf("iceberg source configuration is required")
 		}
 		return NewIcebergSourceConnector(source.Iceberg), nil
-	case "rabbitmq":
-		if source.RabbitMQ == nil {
-			return nil, fmt.Errorf("rabbitmq source configuration is required")
+	case "nessie":
+		if source.Nessie == nil {
+			return nil, fmt.Errorf("nessie source configuration is required")
 		}
-		return NewRabbitMQSourceConnector(source.RabbitMQ), nil
+		return NewNessieSourceConnector(source.Nessie), nil
 	default:
 		return nil, fmt.Errorf("unsupported source type: %s", source.Type)
 	}
@@ -68,11 +68,11 @@ func CreateSinkConnector(sink *v1.SinkSpec) (SinkConnector, error) {
 			return nil, fmt.Errorf("iceberg sink configuration is required")
 		}
 		return NewIcebergSinkConnector(sink.Iceberg), nil
-	case "rabbitmq":
-		if sink.RabbitMQ == nil {
-			return nil, fmt.Errorf("rabbitmq sink configuration is required")
+	case "nessie":
+		if sink.Nessie == nil {
+			return nil, fmt.Errorf("nessie sink configuration is required")
 		}
-		return NewRabbitMQSinkConnector(sink.RabbitMQ), nil
+		return NewNessieSinkConnector(sink.Nessie), nil
 	default:
 		return nil, fmt.Errorf("unsupported sink type: %s", sink.Type)
 	}

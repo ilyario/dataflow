@@ -49,7 +49,6 @@ docker-compose up -d
 Это запустит:
 - Kafka (порт 9092) с Kafka UI (порт 8080)
 - PostgreSQL (порт 5432) с pgAdmin (порт 5050)
-- RabbitMQ (порт 5672) с Management UI (порт 15672)
 - Iceberg REST Catalog (порт 8181) с UI (порт 8081)
 - MinIO (порты 9000, 9001) для хранения данных Iceberg
 
@@ -101,7 +100,6 @@ dataflow/
 │   │   ├── factory.go         # Фабрика коннекторов
 │   │   ├── kafka.go           # Kafka коннектор
 │   │   ├── postgresql.go      # PostgreSQL коннектор
-│   │   ├── rabbitmq.go        # RabbitMQ коннектор
 │   │   └── iceberg.go         # Iceberg коннектор
 │   ├── transformers/          # Трансформации сообщений
 │   │   ├── interface.go       # Интерфейс трансформаций

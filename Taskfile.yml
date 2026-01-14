@@ -33,13 +33,13 @@ tasks:
     desc: Generate ClusterRole and CustomResourceDefinition objects
     deps: [controller-gen]
     cmds:
-      - '{{.LOCALBIN}}/controller-gen rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases'
+      - '{{.LOCALBIN}}/controller-gen rbac:roleName=manager-role crd webhook paths=./api/... output:crd:artifacts:config=config/crd/bases'
 
   generate:
     desc: Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations
     deps: [controller-gen]
     cmds:
-      - '{{.LOCALBIN}}/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."'
+      - '{{.LOCALBIN}}/controller-gen object:headerFile="hack/boilerplate.go.txt" paths=./api/...'
 
   fmt:
     desc: Run go fmt against code
@@ -96,18 +96,6 @@ tasks:
     deps: [manifests, generate, fmt, vet]
     cmds:
       - go run ./main.go
-
-  docker-build:
-    desc: Build docker image with the manager
-    deps: [test]
-    cmds:
-      - docker build -t {{.IMG}} .
-
-  docker-push:
-    desc: Push docker image with the manager
-    cmds:
-      - docker push {{.IMG}}
-
   # Deployment tasks
   install:
     desc: Install CRDs into the K8s cluster specified in ~/.kube/config

@@ -48,7 +48,9 @@ func (r *RemoveTransformer) Transform(ctx context.Context, message *types.Messag
 			// Fallback to manual approach
 			var data map[string]interface{}
 			if err := json.Unmarshal(message.Data, &data); err != nil {
-				return nil, err
+				// Если данные не являются валидным JSON, возвращаем исходное сообщение без изменений
+				// Это позволяет обрабатывать бинарные данные или другие форматы
+				return []*types.Message{message}, nil
 			}
 			// Simple field removal (doesn't support nested paths)
 			delete(data, field)

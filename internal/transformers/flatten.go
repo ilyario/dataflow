@@ -54,7 +54,9 @@ func (f *FlattenTransformer) Transform(ctx context.Context, message *types.Messa
 	// Parse the original message
 	var originalData map[string]interface{}
 	if err := json.Unmarshal(message.Data, &originalData); err != nil {
-		return nil, err
+		// Если данные не являются валидным JSON, возвращаем исходное сообщение без изменений
+		// Это позволяет обрабатывать бинарные данные или другие форматы
+		return []*types.Message{message}, nil
 	}
 
 	// Get the array

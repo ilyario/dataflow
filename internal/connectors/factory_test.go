@@ -161,51 +161,6 @@ func TestCreateSourceConnector_Iceberg(t *testing.T) {
 	}
 }
 
-func TestCreateSourceConnector_RabbitMQ(t *testing.T) {
-	tests := []struct {
-		name        string
-		source      *v1.SourceSpec
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name: "valid rabbitmq source",
-			source: &v1.SourceSpec{
-				Type: "rabbitmq",
-				RabbitMQ: &v1.RabbitMQSourceSpec{
-					URL:   "amqp://guest:guest@localhost:5672/",
-					Queue: "test_queue",
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "rabbitmq source without config",
-			source: &v1.SourceSpec{
-				Type: "rabbitmq",
-			},
-			wantErr:     true,
-			errContains: "rabbitmq source configuration is required",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			connector, err := CreateSourceConnector(tt.source)
-			if tt.wantErr {
-				require.Error(t, err)
-				if tt.errContains != "" {
-					assert.Contains(t, err.Error(), tt.errContains)
-				}
-				assert.Nil(t, connector)
-			} else {
-				require.NoError(t, err)
-				assert.NotNil(t, connector)
-			}
-		})
-	}
-}
-
 func TestCreateSourceConnector_UnsupportedType(t *testing.T) {
 	source := &v1.SourceSpec{
 		Type: "unsupported",
@@ -333,52 +288,6 @@ func TestCreateSinkConnector_Iceberg(t *testing.T) {
 			},
 			wantErr:     true,
 			errContains: "iceberg sink configuration is required",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			connector, err := CreateSinkConnector(tt.sink)
-			if tt.wantErr {
-				require.Error(t, err)
-				if tt.errContains != "" {
-					assert.Contains(t, err.Error(), tt.errContains)
-				}
-				assert.Nil(t, connector)
-			} else {
-				require.NoError(t, err)
-				assert.NotNil(t, connector)
-			}
-		})
-	}
-}
-
-func TestCreateSinkConnector_RabbitMQ(t *testing.T) {
-	tests := []struct {
-		name        string
-		sink        *v1.SinkSpec
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name: "valid rabbitmq sink",
-			sink: &v1.SinkSpec{
-				Type: "rabbitmq",
-				RabbitMQ: &v1.RabbitMQSinkSpec{
-					URL:        "amqp://guest:guest@localhost:5672/",
-					Exchange:   "test_exchange",
-					RoutingKey: "test.routing.key",
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "rabbitmq sink without config",
-			sink: &v1.SinkSpec{
-				Type: "rabbitmq",
-			},
-			wantErr:     true,
-			errContains: "rabbitmq sink configuration is required",
 		},
 	}
 

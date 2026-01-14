@@ -6,10 +6,10 @@ DataFlow Operator supports various connectors for data sources and sinks. Each c
 
 | Connector | Source | Sink | Features |
 |-----------|--------|------|----------|
-| Kafka | ✅ | ✅ | Consumer groups, TLS, SASL |
+| Kafka | ✅ | ✅ | Consumer groups, TLS, SASL, Avro, Schema Registry |
 | PostgreSQL | ✅ | ✅ | SQL queries, batch inserts, auto-create tables |
-| RabbitMQ | ✅ | ✅ | Exchanges, routing keys, queues |
 | Iceberg | ✅ | ✅ | REST API, auto-create namespace/tables |
+| Nessie | ✅ | ✅ | Transactional catalog, S3 backend, auto-create tables |
 
 > **Note**: This is a simplified English version. For complete documentation, see the [Russian version](../ru/connectors.md) or refer to the code examples in `config/samples/`.
 
@@ -45,6 +45,10 @@ All connectors support secret references for the following fields:
 - `tls.certSecretRef` - client certificate
 - `tls.keySecretRef` - private key
 - `tls.caSecretRef` - CA certificate
+- `schemaRegistry.urlSecretRef` - Schema Registry URL
+- `schemaRegistry.basicAuth.usernameSecretRef` - Schema Registry username
+- `schemaRegistry.basicAuth.passwordSecretRef` - Schema Registry password
+- `avroSchemaSecretRef` - Avro schema from secret (for static schema)
 
 #### PostgreSQL
 - `connectionStringSecretRef` - connection string
@@ -55,12 +59,23 @@ All connectors support secret references for the following fields:
 - `namespaceSecretRef` - catalog namespace
 - `tableSecretRef` - table name
 - `tokenSecretRef` - authentication token
+- `awsRegionSecretRef` - AWS region
+- `awsAccessKeyIDSecretRef` - AWS access key ID
+- `awsSecretAccessKeySecretRef` - AWS secret access key
+- `awsEndpointURLSecretRef` - AWS S3 endpoint URL (for MinIO)
 
-#### RabbitMQ
-- `urlSecretRef` - connection URL
-- `queueSecretRef` - queue name
-- `exchangeSecretRef` - exchange name
-- `routingKeySecretRef` - routing key
+**Note:** Iceberg connector supports configurable catalog name via `catalogName` parameter (defaults to "iceberg"). This allows using multiple catalogs in one cluster and ensures compatibility with Trino and other systems. Table identifier format: `catalogName.namespace.table`.
+
+#### Nessie
+- `nessieUrlSecretRef` - Nessie server URL
+- `branchSecretRef` - branch name
+- `namespaceSecretRef` - catalog namespace
+- `tableSecretRef` - table name
+- `tokenSecretRef` - authentication token
+- `awsRegionSecretRef` - AWS region
+- `awsAccessKeyIDSecretRef` - AWS access key ID
+- `awsSecretAccessKeySecretRef` - AWS secret access key
+- `awsEndpointURLSecretRef` - AWS S3 endpoint URL (for MinIO)
 
 ### Usage Examples
 
@@ -270,6 +285,176 @@ If you encounter errors with TLS certificates:
    Ensure the certificate starts with `-----BEGIN CERTIFICATE-----`
 
 3. **Temporary file creation error**: Check operator permissions to create files in the temporary directory
+
+## Kafka
+
+The Kafka connector supports reading and writing messages from/to Apache Kafka topics. It supports consumer groups for scaling, TLS and SASL authentication, as well as Avro format through Confluent Schema Registry or static schema.
+
+### Source
+
+```yaml
+source:
+  type: kafka
+  kafka:
+    brokers:
+      - kafka1:9092
+    topic: input-topic
+    consumerGroup: my-group
+
+    # Message format (optional, default: "json")
+    # Supported formats: "json", "avro"
+    format: json
+
+    # Avro configuration (required if format: "avro")
+    # Option 1: Use Confluent Schema Registry (recommended)
+    schemaRegistry:
+      url: https://schema-registry:8081
+      basicAuth:
+        username: schema-user
+        password: schema-password
+      tls:
+        insecureSkipVerify: false
+        caFile: /path/to/schema-registry-ca.crt
+
+    # Option 2: Static Avro schema (alternative to Schema Registry)
+    # avroSchema: |
+    #   {
+    #     "type": "record",
+    #     "name": "MyRecord",
+    #     "fields": [
+    #       {"name": "id", "type": "long"},
+    #       {"name": "name", "type": "string"}
+    #     ]
+    #   }
+    # Or path to schema file:
+    # avroSchemaFile: /path/to/schema.avsc
+```
+
+### Features
+
+- **Consumer Groups**: Use different consumer groups for scaling processing
+- **Initial Offset**: Reads from oldest message by default (`OffsetOldest`)
+- **Data Formats**: Supports JSON (default) and Avro formats
+- **Avro Support**:
+  - **Confluent Schema Registry**: Automatic schema retrieval by ID from messages (format: magic byte + schema ID + data)
+  - **Static Schema**: Use predefined schema from configuration or file
+  - **Schema Caching**: Schemas from Schema Registry are cached for performance
+- **Metadata**: Each message contains metadata:
+  - `topic` - topic name
+  - `partition` - partition number
+  - `offset` - message offset
+  - `key` - message key (if present)
+
+### Sink
+
+```yaml
+sink:
+  type: kafka
+  kafka:
+    brokers:
+      - kafka1:9092
+    topic: output-topic
+    # TLS and SASL configuration similar to source
+```
+
+## Nessie
+
+The Nessie connector supports reading and writing data from/to Iceberg tables through the Nessie transactional catalog. Nessie provides a Git-like versioning model for table metadata, while data is stored in S3-compatible storage. The connector automatically handles metadata through Nessie API and uses AWS SDK for data access in S3.
+
+### Source
+
+```yaml
+source:
+  type: nessie
+  nessie:
+    # Nessie server URL (required)
+    nessieUrl: "http://nessie:19120/api/v2"
+
+    # Branch to read from (optional, defaults to "main")
+    branch: "main"
+
+    # Namespace in the catalog (required)
+    namespace: analytics
+
+    # Table name (required)
+    table: source_table
+
+    # Authentication token (optional)
+    token: "your-auth-token"
+```
+
+**Features:**
+- **Reading from Iceberg tables**: Uses metadata location from Nessie to load tables
+- **S3 backend**: Automatically works with S3-compatible storage (AWS S3, MinIO, Yandex Object Storage)
+- **s3a:// support**: Automatically converts s3a:// to s3:// for compatibility with iceberg-go
+- **Arrow format**: Uses Apache Arrow for efficient data reading
+- **Branches**: Support for reading from different Nessie branches (default: "main")
+
+### Sink
+
+```yaml
+sink:
+  type: nessie
+  nessie:
+    # Nessie server URL (required)
+    nessieUrl: "http://nessie:19120/api/v2"
+
+    # Branch to write to (optional, defaults to "main")
+    branch: "main"
+
+    # Namespace in the catalog (required)
+    namespace: analytics
+
+    # Table name (required)
+    table: target_table
+
+    # Authentication token (optional)
+    token: "your-auth-token"
+
+    # Auto-create table (optional, defaults to false)
+    autoCreateTable: true
+```
+
+**Features:**
+- **Batch writing**: Groups messages into batches for efficient writing
+- **Auto-create**: Automatically creates tables when needed
+- **Conflict handling**: Automatically handles conflicts during parallel writes with retry mechanism
+- **Arrow format**: Uses Apache Arrow for efficient data serialization
+- **S3 backend**: Automatically works with S3-compatible storage
+- **Branches**: Support for writing to different Nessie branches (default: "main")
+- **Transactions**: Uses Nessie transactional model for atomic operations
+
+### S3 Backend Configuration
+
+The Nessie connector requires S3-compatible storage (AWS S3, MinIO, Yandex Object Storage) for storing Iceberg table data. Configure AWS credentials via Kubernetes secrets or environment variables:
+
+```yaml
+sink:
+  type: nessie
+  nessie:
+    nessieUrl: "http://nessie:19120/api/v2"
+    namespace: analytics
+    table: target_table
+    awsRegionSecretRef:
+      name: s3-credentials
+      key: AWS_REGION
+    awsAccessKeyIDSecretRef:
+      name: s3-credentials
+      key: AWS_ACCESS_KEY_ID
+    awsSecretAccessKeySecretRef:
+      name: s3-credentials
+      key: AWS_SECRET_ACCESS_KEY
+    awsEndpointURLSecretRef:
+      name: s3-credentials
+      key: AWS_ENDPOINT_URL_S3
+```
+
+### Differences from Iceberg REST Catalog
+
+- **Versioning**: Nessie provides Git-like versioning for metadata
+- **Transactions**: Support for transactional operations with metadata
+- **Branches**: Work with branches and tags for version management
+- **Metadata**: Metadata is stored in Nessie, not in REST Catalog
 
 For complete connector documentation, see the [Russian version](../ru/connectors.md).
 

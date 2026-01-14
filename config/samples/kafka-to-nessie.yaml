@@ -1,0 +1,27 @@
+apiVersion: dataflow.dataflow.io/v1
+kind: DataFlow
+metadata:
+  name: kafka-to-nessie
+spec:
+  source:
+    type: kafka
+    kafka:
+      brokers:
+        - localhost:9092
+      topic: stock-topic
+      consumerGroup: dataflow-nessie-group
+  sink:
+    type: nessie
+    nessie:
+      nessieUrl: "http://localhost:19120/api/v2"
+      branch: "main"
+      namespace: analytics
+      table: stock_items
+      autoCreateTable: true
+  transformations:
+    - type: flatten
+      flatten:
+        field: rowsStock
+    - type: timestamp
+      timestamp:
+        fieldName: created_at

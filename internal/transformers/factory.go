@@ -60,6 +60,16 @@ func CreateTransformer(transformation *v1.TransformationSpec) (Transformer, erro
 			return nil, fmt.Errorf("remove transformation configuration is required")
 		}
 		return NewRemoveTransformer(transformation.Remove), nil
+	case "snakeCase":
+		if transformation.SnakeCase == nil {
+			return nil, fmt.Errorf("snakeCase transformation configuration is required")
+		}
+		return NewSnakeCaseTransformer(transformation.SnakeCase), nil
+	case "camelCase":
+		if transformation.CamelCase == nil {
+			return nil, fmt.Errorf("camelCase transformation configuration is required")
+		}
+		return NewCamelCaseTransformer(transformation.CamelCase), nil
 	default:
 		return nil, fmt.Errorf("unsupported transformation type: %s", transformation.Type)
 	}

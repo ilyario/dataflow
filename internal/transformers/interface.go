@@ -18,6 +18,7 @@ package transformers
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/dataflow-operator/dataflow/internal/types"
 )
@@ -26,4 +27,10 @@ import (
 type Transformer interface {
 	// Transform transforms a message and returns one or more messages
 	Transform(ctx context.Context, message *types.Message) ([]*types.Message, error)
+}
+
+// isValidJSON проверяет, являются ли данные валидным JSON
+func isValidJSON(data []byte) bool {
+	var js interface{}
+	return json.Unmarshal(data, &js) == nil
 }

@@ -24,12 +24,15 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	zaprctrl "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -54,18 +57,66 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var logFile string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":9090", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":9091", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
+	flag.StringVar(&logFile, "log-file", "", "Path to log file. If empty, logs will be written to stdout.")
+	opts := zaprctrl.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	// Настройка логгера с возможностью записи в файл
+	if logFile != "" {
+		// Создаем файл для записи логов
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			// Используем временный логгер для вывода ошибки
+			tempLogger := zaprctrl.New(zaprctrl.UseFlagOptions(&opts))
+			ctrl.SetLogger(tempLogger)
+			setupLog := ctrl.Log.WithName("setup")
+			setupLog.Error(err, "unable to open log file", "file", logFile)
+			os.Exit(1)
+		}
+		defer file.Close()
+
+		// Настраиваем zap для записи в файл
+		config := zap.NewDevelopmentConfig()
+		if opts.Development {
+			config.Development = true
+		}
+		config.EncoderConfig = zap.NewDevelopmentEncoderConfig()
+
+		// Определяем уровень логирования из опций
+		// Используем LevelEnabler из опций, если он доступен
+		var levelEnabler zapcore.LevelEnabler = zapcore.InfoLevel
+		if opts.Level != nil {
+			levelEnabler = opts.Level
+		}
+
+		// Создаем core, который пишет в файл
+		core := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(config.EncoderConfig),
+			zapcore.AddSync(file),
+			levelEnabler,
+		)
+
+		// Создаем logger с этим core
+		zapLogger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+		if opts.Development {
+			zapLogger = zapLogger.WithOptions(zap.Development())
+		}
+
+		// Обертываем zap logger в logr.Logger через zapr
+		ctrl.SetLogger(zapr.NewLogger(zapLogger))
+	} else {
+		// Используем стандартную настройку через флаги
+		ctrl.SetLogger(zaprctrl.New(zaprctrl.UseFlagOptions(&opts)))
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

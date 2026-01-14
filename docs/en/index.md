@@ -12,7 +12,6 @@ DataFlow Operator allows you to declaratively define data flows between differen
 
 - **Kafka** - read and write messages from/to Kafka topics with TLS and SASL authentication support
 - **PostgreSQL** - read from tables and write to PostgreSQL tables with support for custom SQL queries and batch inserts
-- **RabbitMQ** - read from queues and publish to RabbitMQ queues with support for exchanges and routing keys
 - **Iceberg** - work with Apache Iceberg through REST API for big data processing
 
 ### Rich Transformation Set
@@ -72,7 +71,7 @@ kubectl describe dataflow kafka-to-postgres
 For local development and testing:
 
 ```bash
-# Start dependencies (Kafka, PostgreSQL, RabbitMQ, Iceberg)
+# Start dependencies (Kafka, PostgreSQL, Iceberg)
 docker-compose up -d
 
 # Run operator locally
@@ -120,12 +119,6 @@ Message processing orchestrator that coordinates the work of source, transformat
 - Automatic table creation
 - JSONB support for flexible schema
 
-### RabbitMQ
-
-- Exchange and routing key support
-- Direct queue publishing
-- Reliable message delivery
-
 ### Iceberg
 
 - REST API integration
@@ -142,7 +135,6 @@ All connectors support configuration from Kubernetes Secrets through `*SecretRef
 - **Kafka**: brokers, topic, consumerGroup, SASL credentials, TLS certificates
 - **PostgreSQL**: connectionString, table
 - **Iceberg**: restCatalogUrl, namespace, table, token
-- **RabbitMQ**: url, queue, exchange, routingKey
 
 This enables:
 - Secure storage of sensitive data

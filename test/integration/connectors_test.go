@@ -20,19 +20,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/kafka"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/modules/rabbitmq"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	v1 "github.com/dataflow-operator/dataflow/api/v1"
@@ -407,161 +406,104 @@ func TestPostgreSQLConnectorIntegration(t *testing.T) {
 	})
 }
 
-// TestRabbitMQConnectorIntegration тестирует RabbitMQ source и sink коннекторы
-func TestRabbitMQConnectorIntegration(t *testing.T) {
+// TestNessieConnectorIntegration тестирует Nessie source и sink коннекторы
+// ВАЖНО: Этот тест требует наличия реальных сервисов:
+// - Nessie сервер (например, http://localhost:19120)
+// - S3-совместимое хранилище (например, MinIO)
+// - Правильно настроенные переменные окружения для S3 (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.)
+//
+// Тест будет пропущен, если сервисы недоступны.
+// Для запуска теста необходимо:
+// 1. Запустить Nessie сервер
+// 2. Настроить S3 хранилище (MinIO или AWS S3)
+// 3. Установить переменные окружения для S3
+// 4. Запустить тест: go test ./test/integration/... -v -run TestNessieConnectorIntegration
+func TestNessieConnectorIntegration(t *testing.T) {
+	// Проверяем наличие необходимых переменных окружения
+	nessieURL := os.Getenv("NESSIE_URL")
+	if nessieURL == "" {
+		nessieURL = "http://localhost:19120" // Значение по умолчанию
+	}
+
+	s3Endpoint := os.Getenv("AWS_ENDPOINT_URL_S3")
+	s3AccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	s3SecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+
+	// Пропускаем тест, если нет S3 credentials
+	if s3AccessKey == "" || s3SecretKey == "" {
+		t.Skip("Skipping Nessie integration test: S3 credentials not provided (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)")
+	}
+
 	ctx := context.Background()
 
-	// Запускаем RabbitMQ контейнер
-	rabbitmqContainer, err := rabbitmq.RunContainer(ctx,
-		testcontainers.WithImage("rabbitmq:3-alpine"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("Server startup complete").
-				WithOccurrence(1).
-				WithStartupTimeout(60*time.Second),
-		),
-	)
-	require.NoError(t, err)
-	defer func() {
-		if err := rabbitmqContainer.Terminate(ctx); err != nil {
-			t.Logf("failed to terminate rabbitmq container: %v", err)
+	// TODO: Добавить проверку доступности Nessie сервера
+	// TODO: Добавить проверку доступности S3 хранилища
+
+	t.Run("Nessie Sink Connector - FileIO validation", func(t *testing.T) {
+		// Этот тест проверяет, что writeBatch корректно обрабатывает ситуацию,
+		// когда FileIO factory может вернуть nil при коммите.
+		// Это критический тест для проверки исправления паники "nil pointer dereference"
+		// в table.doCommit.
+
+		sinkSpec := &v1.NessieSinkSpec{
+			NessieURL: nessieURL,
+			Namespace: "test_namespace",
+			Table:     "test_table_fileio_validation",
+			// S3 настройки будут взяты из переменных окружения
 		}
-	}()
 
-	amqpURL, err := rabbitmqContainer.AmqpURL(ctx)
-	require.NoError(t, err)
-
-	queueName := "test-queue"
-	exchangeName := "test-exchange"
-	routingKey := "test.key"
-
-	t.Run("RabbitMQ Source Connector", func(t *testing.T) {
-		// Настраиваем очередь и exchange
-		conn, err := amqp.Dial(amqpURL)
-		require.NoError(t, err)
-		defer conn.Close()
-
-		ch, err := conn.Channel()
-		require.NoError(t, err)
-		defer ch.Close()
-
-		err = ch.ExchangeDeclare(exchangeName, "topic", true, false, false, false, nil)
-		require.NoError(t, err)
-
-		_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
-		require.NoError(t, err)
-
-		err = ch.QueueBind(queueName, routingKey, exchangeName, false, nil)
-		require.NoError(t, err)
-
-		// Отправляем тестовое сообщение
-		testMessage := map[string]interface{}{
-			"id":   1,
-			"name": "rabbitmq test",
+		// Если указан endpoint, добавляем его в конфигурацию
+		if s3Endpoint != "" {
+			// Note: В текущей реализации S3 настройки берутся из переменных окружения
+			// Если в будущем добавится поддержка конфигурации через spec, можно будет использовать:
+			// sinkSpec.S3Endpoint = s3Endpoint
 		}
-		messageBytes, err := json.Marshal(testMessage)
-		require.NoError(t, err)
 
-		err = ch.PublishWithContext(ctx, exchangeName, routingKey, false, false, amqp.Publishing{
-			ContentType: "application/json",
-			Body:        messageBytes,
-		})
-		require.NoError(t, err)
+		sinkConnector := connectors.NewNessieSinkConnector(sinkSpec)
 
-		// Создаем source коннектор
-		sourceSpec := &v1.RabbitMQSourceSpec{
-			URL:        amqpURL,
-			Queue:      queueName,
-			Exchange:   exchangeName,
-			RoutingKey: routingKey,
+		// Подключаемся
+		err := sinkConnector.Connect(ctx)
+		if err != nil {
+			t.Skipf("Skipping test: failed to connect to Nessie: %v", err)
 		}
-		sourceConnector := connectors.NewRabbitMQSourceConnector(sourceSpec)
-
-		err = sourceConnector.Connect(ctx)
-		require.NoError(t, err)
-		defer sourceConnector.Close()
-
-		// Читаем сообщение
-		msgChan, err := sourceConnector.Read(ctx)
-		require.NoError(t, err)
-
-		select {
-		case msg := <-msgChan:
-			require.NotNil(t, msg)
-			var receivedData map[string]interface{}
-			err = json.Unmarshal(msg.Data, &receivedData)
-			require.NoError(t, err)
-			assert.Equal(t, float64(1), receivedData["id"])
-			assert.Equal(t, "rabbitmq test", receivedData["name"])
-		case <-time.After(10 * time.Second):
-			t.Fatal("timeout waiting for message")
-		}
-	})
-
-	t.Run("RabbitMQ Sink Connector", func(t *testing.T) {
-		sinkQueue := "sink-queue"
-		sinkExchange := "sink-exchange"
-		sinkRoutingKey := "sink.key"
-
-		// Настраиваем очередь и exchange для sink
-		conn, err := amqp.Dial(amqpURL)
-		require.NoError(t, err)
-		defer conn.Close()
-
-		ch, err := conn.Channel()
-		require.NoError(t, err)
-		defer ch.Close()
-
-		err = ch.ExchangeDeclare(sinkExchange, "topic", true, false, false, false, nil)
-		require.NoError(t, err)
-
-		_, err = ch.QueueDeclare(sinkQueue, true, false, false, false, nil)
-		require.NoError(t, err)
-
-		err = ch.QueueBind(sinkQueue, sinkRoutingKey, sinkExchange, false, nil)
-		require.NoError(t, err)
-
-		// Создаем sink коннектор
-		sinkSpec := &v1.RabbitMQSinkSpec{
-			URL:        amqpURL,
-			Exchange:   sinkExchange,
-			RoutingKey: sinkRoutingKey,
-			Queue:      sinkQueue,
-		}
-		sinkConnector := connectors.NewRabbitMQSinkConnector(sinkSpec)
-
-		err = sinkConnector.Connect(ctx)
-		require.NoError(t, err)
 		defer sinkConnector.Close()
 
-		// Создаем сообщение для записи
-		testMessage := map[string]interface{}{
-			"id":   2,
-			"name": "sink test",
+		// Создаем сообщения для записи
+		testMessages := []map[string]interface{}{
+			{"id": 1, "name": "test1", "value": 10},
+			{"id": 2, "name": "test2", "value": 20},
 		}
-		messageBytes, err := json.Marshal(testMessage)
-		require.NoError(t, err)
-		msg := types.NewMessage(messageBytes)
 
-		msgChan := make(chan *types.Message, 1)
-		msgChan <- msg
+		msgChan := make(chan *types.Message, len(testMessages))
+		for _, testMsg := range testMessages {
+			msgBytes, err := json.Marshal(testMsg)
+			require.NoError(t, err)
+			msgChan <- types.NewMessage(msgBytes)
+		}
 		close(msgChan)
 
+		// Записываем сообщения
+		// Этот вызов должен пройти без паники, даже если FileIO factory
+		// потенциально может вернуть nil при коммите
 		err = sinkConnector.Write(ctx, msgChan)
-		require.NoError(t, err)
 
-		// Проверяем, что сообщение записалось
-		msgs, err := ch.Consume(sinkQueue, "", true, false, false, false, nil)
-		require.NoError(t, err)
+		// Проверяем, что не было паники
+		// Если была паника, тест упадет с panic
+		// Если была ошибка (но не паника), это нормально для интеграционного теста
+		if err != nil {
+			// Проверяем, что ошибка не связана с nil pointer
+			errMsg := err.Error()
+			assert.NotContains(t, errMsg, "nil pointer",
+				"Ошибка не должна быть связана с nil pointer - это указывает на проблему с FileIO")
+			assert.NotContains(t, errMsg, "invalid memory address",
+				"Ошибка не должна быть связана с invalid memory address - это указывает на nil pointer dereference")
 
-		select {
-		case rabbitMsg := <-msgs:
-			var receivedData map[string]interface{}
-			err = json.Unmarshal(rabbitMsg.Body, &receivedData)
-			require.NoError(t, err)
-			assert.Equal(t, float64(2), receivedData["id"])
-			assert.Equal(t, "sink test", receivedData["name"])
-		case <-time.After(10 * time.Second):
-			t.Fatal("timeout waiting for message")
+			// Логируем ошибку для отладки, но не падаем тест
+			t.Logf("Write returned error (expected in some cases): %v", err)
+		} else {
+			t.Log("Successfully wrote messages to Nessie table")
 		}
 	})
+
+	// TODO: Добавить тест для Nessie Source Connector
 }

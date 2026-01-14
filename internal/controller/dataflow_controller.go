@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sync"
 	"time"
@@ -61,14 +62,21 @@ func NewDataFlowReconciler(client client.Client, scheme *runtime.Scheme) *DataFl
 // updateStatusWithRetry обновляет статус DataFlow с retry логикой для обработки конфликтов оптимистичной блокировки
 func (r *DataFlowReconciler) updateStatusWithRetry(ctx context.Context, req ctrl.Request, updateFn func(*dataflowv1.DataFlow)) error {
 	log := log.FromContext(ctx)
-	maxRetries := 3
+	maxRetries := 5
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		var df dataflowv1.DataFlow
 		if err := r.Get(ctx, req.NamespacedName, &df); err != nil {
+			if apierrors.IsNotFound(err) {
+				// Если объект не найден, не имеет смысла повторять попытки
+				return err
+			}
 			if attempt < maxRetries-1 {
-				log.Error(err, "unable to fetch DataFlow for status update, retrying", "attempt", attempt+1)
-				time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+				log.Error(err, "unable to fetch DataFlow for status update, retrying", "attempt", attempt+1, "maxRetries", maxRetries)
+				// Экспоненциальная задержка с jitter: базовая задержка * (2^attempt) + случайная задержка до 50ms
+				baseDelay := time.Duration(1<<uint(attempt)) * 200 * time.Millisecond
+				jitter := time.Duration(rand.Intn(50)) * time.Millisecond
+				time.Sleep(baseDelay + jitter)
 				continue
 			}
 			return fmt.Errorf("failed to fetch DataFlow after %d attempts: %w", maxRetries, err)
@@ -81,14 +89,23 @@ func (r *DataFlowReconciler) updateStatusWithRetry(ctx context.Context, req ctrl
 			if apierrors.IsConflict(err) {
 				if attempt < maxRetries-1 {
 					log.Info("status update conflict, retrying", "attempt", attempt+1, "maxRetries", maxRetries)
-					time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+					// Экспоненциальная задержка с jitter: базовая задержка * (2^attempt) + случайная задержка до 50ms
+					baseDelay := time.Duration(1<<uint(attempt)) * 200 * time.Millisecond
+					jitter := time.Duration(rand.Intn(50)) * time.Millisecond
+					time.Sleep(baseDelay + jitter)
 					continue
 				}
-				return fmt.Errorf("failed to update status after %d retries due to conflict: %w", maxRetries, err)
+				// После всех попыток возвращаем конфликт, чтобы вызвать requeue
+				return err
 			}
+			// Для других ошибок возвращаем сразу
 			return err
 		}
 
+		// Успешное обновление
+		if attempt > 0 {
+			log.Info("Successfully updated DataFlow status after retry", "attempt", attempt+1)
+		}
 		return nil
 	}
 
@@ -219,34 +236,19 @@ func (r *DataFlowReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				r.mu.Unlock()
 
 				// Update status with a separate context that won't be canceled
-				// Use retry logic to handle transient errors
+				// Use retry logic to handle transient errors and conflicts
 				updateCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 
-				// Retry updating status a few times
-				var df dataflowv1.DataFlow
-				for i := 0; i < 3; i++ {
-					if err := r.Get(updateCtx, req.NamespacedName, &df); err != nil {
-						log.Error(err, "unable to fetch DataFlow for status update", "attempt", i+1)
-						if i < 2 {
-							time.Sleep(1 * time.Second)
-							continue
-						}
-						return
-					}
-
+				// Сохраняем ошибку для использования в функции обновления
+				processorErr := err
+				if updateErr := r.updateStatusWithRetry(updateCtx, req, func(df *dataflowv1.DataFlow) {
 					df.Status.Phase = "Error"
-					df.Status.Message = fmt.Sprintf("Processor error: %v", err)
-					if updateErr := r.Status().Update(updateCtx, &df); updateErr != nil {
-						log.Error(updateErr, "unable to update DataFlow status after processor error", "attempt", i+1)
-						if i < 2 {
-							time.Sleep(1 * time.Second)
-							continue
-						}
-					} else {
-						log.Info("Successfully updated DataFlow status to Error")
-						break
-					}
+					df.Status.Message = fmt.Sprintf("Processor error: %v", processorErr)
+				}); updateErr != nil {
+					log.Error(updateErr, "unable to update DataFlow status after processor error")
+				} else {
+					log.Info("Successfully updated DataFlow status to Error")
 				}
 			}
 		}()

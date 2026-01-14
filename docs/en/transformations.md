@@ -15,6 +15,8 @@ DataFlow Operator supports various message transformations that are applied sequ
 | Router | Routes to different sinks | 1 message | 0 or 1 message |
 | Select | Selects fields | 1 message | 1 message |
 | Remove | Removes fields | 1 message | 1 message |
+| SnakeCase | Converts keys to snake_case | 1 message | 1 message |
+| CamelCase | Converts keys to CamelCase | 1 message | 1 message |
 
 ## Timestamp
 
@@ -148,10 +150,79 @@ Transformations are applied sequentially in the order specified in the `transfor
 
 1. **Flatten** should be first if you need to expand arrays
 2. **Filter** apply early to reduce the volume of processed data
-3. **Mask/Remove** apply before Select for security
-4. **Select** apply at the end for final cleanup
-5. **Timestamp** can be applied anywhere, but usually at the beginning or end
-6. **Router** usually applied at the end, after all other transformations
+3. **SnakeCase/CamelCase** apply after Select/Remove, but before sending to sink
+4. **Mask/Remove** apply before Select for security
+5. **Select** apply at the end for final cleanup
+6. **Timestamp** can be applied anywhere, but usually at the beginning or end
+7. **Router** usually applied at the end, after all other transformations
+
+## SnakeCase
+
+Converts all JSON object keys to `snake_case` format. Useful for normalizing field names when integrating with systems using snake_case (e.g., PostgreSQL, Python API).
+
+### Configuration
+
+```yaml
+transformations:
+  - type: snakeCase
+    snakeCase:
+      # Recursively convert nested objects (optional, default: false)
+      deep: true
+```
+
+### Example
+
+**Input:**
+```json
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "isActive": true
+}
+```
+
+**Output:**
+```json
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "is_active": true
+}
+```
+
+## CamelCase
+
+Converts all JSON object keys to `CamelCase` (PascalCase) format. Useful for normalizing field names when integrating with systems using CamelCase (e.g., Java, C# API).
+
+### Configuration
+
+```yaml
+transformations:
+  - type: camelCase
+    camelCase:
+      # Recursively convert nested objects (optional, default: false)
+      deep: true
+```
+
+### Example
+
+**Input:**
+```json
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "is_active": true
+}
+```
+
+**Output:**
+```json
+{
+  "FirstName": "John",
+  "LastName": "Doe",
+  "IsActive": true
+}
+```
 
 For complete transformation documentation with examples, see the [Russian version](../ru/transformations.md).
 

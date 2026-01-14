@@ -1,0 +1,38 @@
+apiVersion: dataflow.dataflow.io/v1
+kind: DataFlow
+metadata:
+  name: kafka-schema-registry-to-nessie
+spec:
+  source:
+    type: kafka
+    kafka:
+      brokers:
+        - localhost:9092
+      topic: stock-topic
+      consumerGroup: dataflow-nessie-group
+      format: avro
+      schemaRegistry:
+        # Schema Registry URL (required)
+        url: https://rc1a-hd87l57gvr84oggg.mdb.yandexcloud.net
+        # Optional: Basic authentication (if not specified, connects without authentication)
+        # basicAuth:
+        #   username: user
+        #   password: password
+        # TLS configuration (required for HTTPS with self-signed or internal CA certificates)
+        tls:
+          # For Yandex Cloud or other services with internal CA, set to true
+          insecureSkipVerify: true
+          # Or provide CA certificate file
+          # caFile: /path/to/ca.crt
+  sink:
+    type: nessie
+    nessie:
+      nessieUrl: "http://localhost:19120/api/v2"
+      branch: "main"
+      namespace: analytics
+      table: stock_items
+      autoCreateTable: true
+  transformations:
+    - type: timestamp
+      timestamp:
+        fieldName: created_at

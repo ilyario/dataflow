@@ -6,14 +6,14 @@ DataFlow Operator поддерживает различные коннектор
 
 | Коннектор | Источник | Приемник | Особенности |
 |-----------|----------|----------|-------------|
-| Kafka | ✅ | ✅ | Consumer groups, TLS, SASL |
+| Kafka | ✅ | ✅ | Consumer groups, TLS, SASL, Avro, Schema Registry |
 | PostgreSQL | ✅ | ✅ | SQL запросы, батч-вставки, автосоздание таблиц |
-| RabbitMQ | ✅ | ✅ | Exchanges, routing keys, очереди |
 | Iceberg | ✅ | ✅ | REST API, автосоздание namespace/таблиц |
+| Nessie | ✅ | ✅ | Транзакционный каталог, S3 backend, автосоздание таблиц |
 
 ## Kafka
 
-Kafka коннектор поддерживает чтение и запись сообщений из/в топики Apache Kafka. Поддерживает consumer groups для масштабирования, TLS и SASL аутентификацию.
+Kafka коннектор поддерживает чтение и запись сообщений из/в топики Apache Kafka. Поддерживает consumer groups для масштабирования, TLS и SASL аутентификацию, а также работу с Avro форматом через Confluent Schema Registry или статическую схему.
 
 ### Источник (Source)
 
@@ -52,12 +52,48 @@ source:
       mechanism: scram-sha-256
       username: kafka-user
       password: kafka-password
+
+    # Формат сообщений (опционально, по умолчанию: "json")
+    # Поддерживаемые форматы: "json", "avro"
+    format: json
+
+    # Конфигурация Avro (требуется если format: "avro")
+    # Вариант 1: Использование Confluent Schema Registry (рекомендуется)
+    schemaRegistry:
+      # URL Schema Registry (обязательно)
+      url: https://schema-registry:8081
+      # Basic Auth для Schema Registry (опционально)
+      basicAuth:
+        username: schema-user
+        password: schema-password
+      # TLS конфигурация для Schema Registry (опционально)
+      tls:
+        insecureSkipVerify: false
+        caFile: /path/to/schema-registry-ca.crt
+
+    # Вариант 2: Статическая Avro схема (альтернатива Schema Registry)
+    # avroSchema: |
+    #   {
+    #     "type": "record",
+    #     "name": "MyRecord",
+    #     "fields": [
+    #       {"name": "id", "type": "long"},
+    #       {"name": "name", "type": "string"}
+    #     ]
+    #   }
+    # Или путь к файлу со схемой:
+    # avroSchemaFile: /path/to/schema.avsc
 ```
 
 #### Особенности Kafka источника
 
 - **Consumer Groups**: Используйте разные consumer groups для масштабирования обработки
 - **Начальная позиция**: По умолчанию читает с самого старого сообщения (`OffsetOldest`)
+- **Форматы данных**: Поддерживает JSON (по умолчанию) и Avro форматы
+- **Avro поддержка**:
+  - **Confluent Schema Registry**: Автоматическое получение схем по ID из сообщений (формат: magic byte + schema ID + data)
+  - **Статическая схема**: Использование предопределенной схемы из конфигурации или файла
+  - **Кэширование схем**: Схемы из Schema Registry кэшируются для повышения производительности
 - **Метаданные**: Каждое сообщение содержит метаданные:
   - `topic` - название топика
   - `partition` - номер партиции
@@ -82,6 +118,54 @@ source:
       mechanism: scram-sha-512
       username: kafka-user
       password: ${KAFKA_PASSWORD}  # Используйте Secrets в Kubernetes
+```
+
+#### Пример с Avro и Schema Registry
+
+```yaml
+source:
+  type: kafka
+  kafka:
+    brokers:
+      - kafka:9092
+    topic: avro-topic
+    consumerGroup: avro-group
+    format: avro
+    schemaRegistry:
+      url: https://schema-registry:8081
+      basicAuth:
+        username: schema-user
+        password: schema-password
+      tls:
+        insecureSkipVerify: true  # Для self-signed сертификатов
+        # caFile: /path/to/ca.crt  # Или укажите CA сертификат
+```
+
+#### Пример с Avro и статической схемой
+
+```yaml
+source:
+  type: kafka
+  kafka:
+    brokers:
+      - kafka:9092
+    topic: avro-topic
+    consumerGroup: avro-group
+    format: avro
+    avroSchema: |
+      {
+        "type": "record",
+        "name": "Stock",
+        "namespace": "com.example",
+        "fields": [
+          {"name": "id", "type": "long"},
+          {"name": "symbol", "type": "string"},
+          {"name": "price", "type": "double"},
+          {"name": "quantity", "type": "int"}
+        ]
+      }
+    # Или используйте файл:
+    # avroSchemaFile: /path/to/schema.avsc
 ```
 
 ### Приемник (Sink)
@@ -226,98 +310,9 @@ CREATE TABLE events (
 CREATE INDEX idx_events_data ON events USING GIN (data);
 ```
 
-## RabbitMQ
-
-RabbitMQ коннектор поддерживает чтение из очередей и публикацию в очереди RabbitMQ. Поддерживает exchanges, routing keys и прямую публикацию в очереди.
-
-### Источник (Source)
-
-Конфигурация RabbitMQ источника:
-
-```yaml
-source:
-  type: rabbitmq
-  rabbitmq:
-    # URL подключения (обязательно)
-    # Формат: amqp://user:password@host:port/vhost
-    url: "amqp://guest:guest@localhost:5672/"
-
-    # Очередь для чтения (обязательно)
-    queue: input-queue
-
-    # Exchange для привязки очереди (опционально)
-    exchange: input-exchange
-
-    # Routing key для привязки (опционально, требуется если указан exchange)
-    routingKey: input.key
-```
-
-#### Особенности RabbitMQ источника
-
-- **Автоматическое объявление**: Автоматически объявляет очередь, если она не существует
-- **Привязка к exchange**: Автоматически привязывает очередь к exchange, если указан
-- **Подтверждение доставки**: Использует ручное подтверждение (manual ack) для надежности
-- **Метаданные**: Каждое сообщение содержит:
-  - `exchange` - название exchange
-  - `routingKey` - routing key сообщения
-  - `deliveryTag` - тег доставки
-
-#### Пример с exchange и routing key
-
-```yaml
-source:
-  type: rabbitmq
-  rabbitmq:
-    url: "amqp://user:password@rabbitmq:5672/vhost"
-    queue: events-queue
-    exchange: events-exchange
-    routingKey: events.*  # Поддержка wildcards
-```
-
-### Приемник (Sink)
-
-Конфигурация RabbitMQ приемника:
-
-```yaml
-sink:
-  type: rabbitmq
-  rabbitmq:
-    # URL подключения (обязательно)
-    url: "amqp://guest:guest@localhost:5672/"
-
-    # Exchange для публикации (обязательно)
-    exchange: output-exchange
-
-    # Routing key (обязательно)
-    routingKey: output.key
-
-    # Прямая публикация в очередь (опционально)
-    # Если указан, сообщения публикуются напрямую в очередь, минуя exchange
-    queue: output-queue
-```
-
-#### Особенности RabbitMQ приемника
-
-- **Автоматическое объявление exchange**: Автоматически объявляет exchange типа `topic`
-- **Динамический routing key**: Может использовать routing key из метаданных сообщения
-- **Надежная доставка**: Использует persistent messages для надежности
-
-#### Пример с динамическим routing key
-
-Если сообщение содержит метаданные `routingKey`, оно будет использовано вместо указанного в конфигурации:
-
-```yaml
-sink:
-  type: rabbitmq
-  rabbitmq:
-    url: "amqp://user:password@rabbitmq:5672/"
-    exchange: events-exchange
-    routingKey: default.key  # Используется, если нет в метаданных
-```
-
 ## Iceberg
 
-Iceberg коннектор работает с Apache Iceberg через REST API. Оптимизирован для работы с большими данными и поддерживает автоматическое создание namespace и таблиц.
+Iceberg коннектор работает с Apache Iceberg через REST API. Оптимизирован для работы с большими данными и поддерживает автоматическое создание namespace и таблиц. Имя каталога можно настроить через параметр `catalogName` (по умолчанию: "iceberg"). Это позволяет использовать несколько каталогов в одном кластере и обеспечивает совместимость с Trino и другими системами.
 
 ### Источник (Source)
 
@@ -329,6 +324,11 @@ source:
   iceberg:
     # URL REST Catalog (обязательно)
     restCatalogUrl: "http://iceberg-rest:8181"
+
+    # Имя каталога (опционально, по умолчанию: "iceberg")
+    # Используется для идентификации каталога в Trino и других системах
+    # Формат идентификатора таблицы: catalogName.namespace.table
+    catalogName: "iceberg"
 
     # Namespace в каталоге (обязательно)
     namespace: analytics
@@ -350,7 +350,36 @@ source:
 
 #### Требования для работы
 
-Для работы Iceberg коннектора необходимо настроить переменные окружения для доступа к объектному хранилищу (S3/MinIO):
+Для работы Iceberg коннектора необходимо настроить доступ к объектному хранилищу (S3/MinIO). Это можно сделать двумя способами:
+
+**1. Через секреты Kubernetes (рекомендуется):**
+
+```yaml
+sink:
+  type: iceberg
+  iceberg:
+    restCatalogUrl: "http://iceberg-rest:8181"
+    namespace: analytics
+    table: target_table
+    awsRegionSecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: AWS_REGION
+    awsAccessKeyIDSecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: AWS_ACCESS_KEY_ID
+    awsSecretAccessKeySecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: AWS_SECRET_ACCESS_KEY
+    awsEndpointURLSecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: AWS_ENDPOINT_URL_S3
+```
+
+**2. Через переменные окружения в поде:**
 
 ```bash
 export AWS_REGION=us-east-1
@@ -358,6 +387,8 @@ export AWS_ACCESS_KEY_ID=admin
 export AWS_SECRET_ACCESS_KEY=password
 export AWS_ENDPOINT_URL_S3=http://localhost:9000  # Для MinIO
 ```
+
+> **Примечание:** REST catalog управляет только метаданными (схемы, партиции). Файлы данных записываются напрямую в S3/MinIO через AWS SDK, поэтому необходимы AWS credentials.
 
 ### Приемник (Sink)
 
@@ -369,6 +400,11 @@ sink:
   iceberg:
     # URL REST Catalog (обязательно)
     restCatalogUrl: "http://iceberg-rest:8181"
+
+    # Имя каталога (опционально, по умолчанию: "iceberg")
+    # Используется для идентификации каталога в Trino и других системах
+    # Формат идентификатора таблицы: catalogName.namespace.table
+    catalogName: "iceberg"
 
     # Namespace в каталоге (обязательно)
     namespace: analytics
@@ -394,21 +430,43 @@ sink:
 - **Обработка конфликтов**: Автоматически обрабатывает конфликты при параллельных записях
 - **Arrow формат**: Использует Apache Arrow для эффективной сериализации данных
 
-#### Пример с автосозданием
+#### Пример с автосозданием и секретами
 
 ```yaml
 sink:
   type: iceberg
   iceberg:
     restCatalogUrl: "http://iceberg-rest:8181"
+    # Имя каталога (опционально, по умолчанию: "iceberg")
+    # Используется для идентификации каталога в Trino и других системах
+    # Формат идентификатора таблицы: catalogName.namespace.table
+    catalogName: "iceberg"
     namespace: analytics
     table: events
-    token: "${ICEBERG_TOKEN}"
+    tokenSecretRef:
+      name: iceberg-credentials
+      namespace: dataflow
+      key: token
+    # AWS credentials для записи данных в S3
+    awsRegionSecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: aws-region
+    awsAccessKeyIDSecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: aws-access-key-id
+    awsSecretAccessKeySecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: aws-secret-access-key
     autoCreateNamespace: true
     autoCreateTable: true
 ```
 
 Автоматически созданная таблица будет иметь схему с полем `data` типа `String`, в котором хранится JSON представление сообщения.
+
+> **Важно:** REST catalog управляет только метаданными. Файлы данных записываются напрямую в S3, поэтому необходимы AWS credentials через секреты или переменные окружения.
 
 ## Использование Secrets в Kubernetes
 
@@ -442,6 +500,10 @@ secretRef:
 - `tls.certSecretRef` - сертификат клиента
 - `tls.keySecretRef` - приватный ключ
 - `tls.caSecretRef` - CA сертификат
+- `schemaRegistry.urlSecretRef` - URL Schema Registry
+- `schemaRegistry.basicAuth.usernameSecretRef` - имя пользователя для Schema Registry
+- `schemaRegistry.basicAuth.passwordSecretRef` - пароль для Schema Registry
+- `avroSchemaSecretRef` - Avro схема из секрета (для статической схемы)
 
 #### PostgreSQL
 - `connectionStringSecretRef` - строка подключения
@@ -452,12 +514,21 @@ secretRef:
 - `namespaceSecretRef` - namespace в каталоге
 - `tableSecretRef` - название таблицы
 - `tokenSecretRef` - токен аутентификации
+- `awsRegionSecretRef` - AWS регион
+- `awsAccessKeyIDSecretRef` - AWS access key ID
+- `awsSecretAccessKeySecretRef` - AWS secret access key
+- `awsEndpointURLSecretRef` - URL endpoint для S3 (опционально, только для MinIO)
 
-#### RabbitMQ
-- `urlSecretRef` - URL подключения
-- `queueSecretRef` - название очереди
-- `exchangeSecretRef` - название exchange
-- `routingKeySecretRef` - routing key
+#### Nessie
+- `nessieUrlSecretRef` - URL сервера Nessie
+- `branchSecretRef` - название ветки
+- `namespaceSecretRef` - namespace в каталоге
+- `tableSecretRef` - название таблицы
+- `tokenSecretRef` - токен аутентификации
+- `awsRegionSecretRef` - AWS регион
+- `awsAccessKeyIDSecretRef` - AWS access key ID
+- `awsSecretAccessKeySecretRef` - AWS secret access key
+- `awsEndpointURLSecretRef` - URL endpoint для S3 (опционально, только для MinIO)
 
 ### Примеры использования
 
@@ -759,17 +830,181 @@ kubectl logs -l app.kubernetes.io/name=dataflow-operator | grep -i secret
 - Используйте индексы на часто запрашиваемых полях
 - Настройте `pollInterval` в зависимости от частоты обновления данных
 
-### RabbitMQ
-
-- Используйте persistent queues для надежности
-- Настройте prefetch count для оптимизации производительности
-- Используйте exchanges для гибкой маршрутизации
-
 ### Iceberg
 
 - Используйте батчи для записи (автоматически, размер 10 сообщений)
 - Настройте правильный размер партиций для ваших данных
 - Используйте compaction для оптимизации чтения
+
+## Nessie
+
+Nessie коннектор поддерживает чтение и запись данных из/в Iceberg таблицы через Nessie транзакционный каталог. Nessie предоставляет Git-подобную модель версионирования для метаданных таблиц, а данные хранятся в S3-совместимом хранилище. Коннектор автоматически обрабатывает метаданные через Nessie API и использует AWS SDK для доступа к данным в S3.
+
+### Источник (Source)
+
+Конфигурация Nessie источника:
+
+```yaml
+source:
+  type: nessie
+  nessie:
+    # URL сервера Nessie (обязательно)
+    nessieUrl: "http://nessie:19120/api/v2"
+
+    # Ветка для чтения (опционально, по умолчанию: "main")
+    branch: "main"
+
+    # Namespace в каталоге (обязательно)
+    namespace: analytics
+
+    # Название таблицы (обязательно)
+    table: source_table
+
+    # Токен аутентификации (опционально)
+    token: "your-auth-token"
+```
+
+#### Особенности Nessie источника
+
+- **Чтение из Iceberg таблиц**: Использует metadata location из Nessie для загрузки таблиц
+- **S3 backend**: Автоматически работает с S3-совместимым хранилищем (AWS S3, MinIO, Yandex Object Storage)
+- **Поддержка s3a://**: Автоматически конвертирует s3a:// в s3:// для совместимости с iceberg-go
+- **Arrow формат**: Использует Apache Arrow для эффективного чтения данных
+- **Ветки**: Поддержка чтения из разных веток Nessie (по умолчанию: "main")
+- **Метаданные**: Каждое сообщение содержит:
+  - `namespace` - namespace таблицы
+  - `table` - название таблицы
+
+#### Требования для работы
+
+Для работы Nessie коннектора необходимо настроить доступ к объектному хранилищу (S3/MinIO). Это можно сделать двумя способами:
+
+**1. Через секреты Kubernetes (рекомендуется):**
+
+```yaml
+source:
+  type: nessie
+  nessie:
+    nessieUrl: "http://nessie:19120/api/v2"
+    namespace: analytics
+    table: source_table
+    awsRegionSecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: AWS_REGION
+    awsAccessKeyIDSecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: AWS_ACCESS_KEY_ID
+    awsSecretAccessKeySecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: AWS_SECRET_ACCESS_KEY
+    awsEndpointURLSecretRef:
+      name: s3-credentials
+      namespace: dataflow
+      key: AWS_ENDPOINT_URL_S3
+```
+
+**2. Через переменные окружения в поде:**
+
+```bash
+export AWS_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=admin
+export AWS_SECRET_ACCESS_KEY=password
+export AWS_ENDPOINT_URL_S3=http://localhost:9000  # Для MinIO
+```
+
+> **Примечание:** Nessie управляет метаданными таблиц (metadata location), а файлы данных хранятся в S3/MinIO. Коннектор использует AWS SDK для доступа к данным, поэтому необходимы AWS credentials.
+
+### Приемник (Sink)
+
+Конфигурация Nessie приемника:
+
+```yaml
+sink:
+  type: nessie
+  nessie:
+    # URL сервера Nessie (обязательно)
+    nessieUrl: "http://nessie:19120/api/v2"
+
+    # Ветка для записи (опционально, по умолчанию: "main")
+    branch: "main"
+
+    # Namespace в каталоге (обязательно)
+    namespace: analytics
+
+    # Название таблицы (обязательно)
+    table: target_table
+
+    # Токен аутентификации (опционально)
+    token: "your-auth-token"
+
+    # Автоматическое создание таблицы (опционально, по умолчанию: false)
+    # Если true, создает таблицу с полем "data" типа String
+    autoCreateTable: true
+```
+
+#### Особенности Nessie приемника
+
+- **Батч-запись**: Группирует сообщения в батчи для эффективной записи
+- **Автосоздание**: Автоматически создает таблицы при необходимости
+- **Обработка конфликтов**: Автоматически обрабатывает конфликты при параллельных записях с retry механизмом
+- **Arrow формат**: Использует Apache Arrow для эффективной сериализации данных
+- **S3 backend**: Автоматически работает с S3-совместимым хранилищем
+- **Ветки**: Поддержка записи в разные ветки Nessie (по умолчанию: "main")
+- **Транзакции**: Использует транзакционную модель Nessie для атомарных операций
+
+#### Пример с автосозданием и секретами
+
+```yaml
+sink:
+  type: nessie
+  nessie:
+    nessieUrl: "http://nessie:19120/api/v2"
+    namespace: analytics
+    table: target_table
+    autoCreateTable: true
+    # Использование секретов для конфиденциальных данных
+    tokenSecretRef:
+      name: nessie-credentials
+      key: token
+    awsRegionSecretRef:
+      name: s3-credentials
+      key: AWS_REGION
+    awsAccessKeyIDSecretRef:
+      name: s3-credentials
+      key: AWS_ACCESS_KEY_ID
+    awsSecretAccessKeySecretRef:
+      name: s3-credentials
+      key: AWS_SECRET_ACCESS_KEY
+    awsEndpointURLSecretRef:
+      name: s3-credentials
+      key: AWS_ENDPOINT_URL_S3
+```
+
+#### Поддерживаемые секреты
+
+Nessie коннектор поддерживает следующие секреты:
+
+- `nessieUrlSecretRef` - URL сервера Nessie
+- `branchSecretRef` - название ветки
+- `namespaceSecretRef` - namespace в каталоге
+- `tableSecretRef` - название таблицы
+- `tokenSecretRef` - токен аутентификации
+- `awsRegionSecretRef` - AWS регион
+- `awsAccessKeyIDSecretRef` - AWS access key ID
+- `awsSecretAccessKeySecretRef` - AWS secret access key
+- `awsEndpointURLSecretRef` - AWS S3 endpoint URL (для MinIO)
+
+#### Отличия от Iceberg REST Catalog
+
+Nessie коннектор отличается от Iceberg REST Catalog коннектора:
+
+- **Версионирование**: Nessie предоставляет Git-подобную модель версионирования метаданных
+- **Транзакции**: Поддержка транзакционных операций с метаданными
+- **Ветки**: Работа с ветками и тегами для управления версиями
+- **Метаданные**: Метаданные хранятся в Nessie, а не в REST Catalog
 
 ## Устранение неполадок
 

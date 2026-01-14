@@ -21,7 +21,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +43,258 @@ import (
 // contains checks if a string contains a substring (case-insensitive)
 func contains(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+}
+
+// extractErrorDetails извлекает детальную информацию из ошибки, включая HTTP статус код и тело ответа для rest.errorResponse
+func extractErrorDetails(err error) (errMsg string, statusCode int, responseBody string) {
+	// Начинаем с базового сообщения об ошибке
+	errMsg = err.Error()
+	if errMsg == "" || errMsg == ": " {
+		errMsg = "<empty error message>"
+	}
+
+	// Попытка извлечь детали из rest.errorResponse через рефлексию
+	errValue := reflect.ValueOf(err)
+
+	// Если это указатель, разыменовываем
+	if errValue.Kind() == reflect.Ptr {
+		if errValue.IsNil() {
+			return errMsg, statusCode, responseBody
+		}
+		errValue = errValue.Elem()
+	}
+
+	if errValue.Kind() == reflect.Struct {
+		// Ищем поля StatusCode, Status, Code, Body, Message, Error, ResponseBody
+		errType := errValue.Type()
+
+		// Логируем все поля структуры для отладки
+		fmt.Printf("DEBUG: extractErrorDetails - Struct type: %s, fields count: %d\n", errType.Name(), errValue.NumField())
+		for i := 0; i < errValue.NumField(); i++ {
+			field := errType.Field(i)
+			fieldValue := errValue.Field(i)
+			fieldName := field.Name
+			fieldType := field.Type.String()
+			canInterface := fieldValue.CanInterface()
+
+			fmt.Printf("DEBUG: extractErrorDetails - Field[%d]: name=%q, type=%s, canInterface=%v\n",
+				i, fieldName, fieldType, canInterface)
+
+			// Пропускаем неэкспортированные поля для обычного доступа
+			if !fieldValue.CanInterface() {
+				// Для неэкспортированного поля wrapping (тип error) пытаемся извлечь через unwrap
+				if fieldName == "wrapping" && fieldType == "error" {
+					fmt.Printf("DEBUG: extractErrorDetails - Found unexported wrapping field, attempting to unwrap error\n")
+					// Пытаемся unwrap ошибку
+					if unwrapper, ok := err.(interface{ Unwrap() error }); ok {
+						if unwrappedErr := unwrapper.Unwrap(); unwrappedErr != nil {
+							unwrappedMsg := unwrappedErr.Error()
+							if unwrappedMsg != "" && unwrappedMsg != errMsg {
+								if errMsg == "" || errMsg == "<empty error message>" || errMsg == ": " {
+									errMsg = unwrappedMsg
+								} else {
+									errMsg = errMsg + " (wrapped: " + unwrappedMsg + ")"
+								}
+								fmt.Printf("DEBUG: extractErrorDetails - Unwrapped error message: %q\n", unwrappedMsg)
+							}
+						}
+					}
+				} else {
+					fmt.Printf("DEBUG: extractErrorDetails - Unexported field: %s (type: %s)\n", fieldName, fieldType)
+				}
+				continue
+			}
+
+			fieldNameLower := strings.ToLower(field.Name)
+
+			// Извлекаем статус код (для rest.errorResponse это поле Code)
+			if statusCode == 0 {
+				if fieldNameLower == "statuscode" || fieldNameLower == "code" || fieldNameLower == "status" || fieldNameLower == "httpstatus" {
+					switch v := fieldValue.Interface().(type) {
+					case int:
+						statusCode = v
+						fmt.Printf("DEBUG: extractErrorDetails - Found status code in field %s: %d\n", field.Name, statusCode)
+					case int32:
+						statusCode = int(v)
+						fmt.Printf("DEBUG: extractErrorDetails - Found status code in field %s: %d\n", field.Name, statusCode)
+					case int64:
+						statusCode = int(v)
+						fmt.Printf("DEBUG: extractErrorDetails - Found status code in field %s: %d\n", field.Name, statusCode)
+					case uint:
+						statusCode = int(v)
+						fmt.Printf("DEBUG: extractErrorDetails - Found status code in field %s: %d\n", field.Name, statusCode)
+					case uint32:
+						statusCode = int(v)
+						fmt.Printf("DEBUG: extractErrorDetails - Found status code in field %s: %d\n", field.Name, statusCode)
+					case uint64:
+						statusCode = int(v)
+						fmt.Printf("DEBUG: extractErrorDetails - Found status code in field %s: %d\n", field.Name, statusCode)
+					case http.Response:
+						statusCode = v.StatusCode
+						fmt.Printf("DEBUG: extractErrorDetails - Found status code in field %s: %d\n", field.Name, statusCode)
+					}
+				}
+			}
+
+			// Извлекаем сообщение об ошибке (для rest.errorResponse это поле Message)
+			if errMsg == "" || errMsg == "<empty error message>" || errMsg == ": " {
+				if fieldNameLower == "message" || fieldNameLower == "msg" {
+					switch v := fieldValue.Interface().(type) {
+					case string:
+						if v != "" {
+							errMsg = v
+							fmt.Printf("DEBUG: extractErrorDetails - Found message in field %s: %q\n", field.Name, errMsg)
+						}
+					}
+				}
+			}
+
+			// Извлекаем тип ошибки (для rest.errorResponse это поле Type)
+			if fieldNameLower == "type" {
+				switch v := fieldValue.Interface().(type) {
+				case string:
+					if v != "" {
+						fmt.Printf("DEBUG: extractErrorDetails - Found error type in field %s: %q\n", field.Name, v)
+						// Добавляем тип к сообщению, если оно пустое
+						if errMsg == "" || errMsg == "<empty error message>" || errMsg == ": " {
+							errMsg = v
+						} else {
+							errMsg = fmt.Sprintf("%s (type: %s)", errMsg, v)
+						}
+					}
+				}
+			}
+
+			// Извлекаем тело ответа
+			if responseBody == "" {
+				if fieldNameLower == "body" || fieldNameLower == "error" ||
+					fieldNameLower == "response" || fieldNameLower == "responsebody" || fieldNameLower == "errormsg" {
+					switch v := fieldValue.Interface().(type) {
+					case string:
+						if v != "" {
+							responseBody = v
+							fmt.Printf("DEBUG: extractErrorDetails - Found response body in field %s: %q\n", field.Name, responseBody)
+						}
+					case []byte:
+						if len(v) > 0 {
+							responseBody = string(v)
+							fmt.Printf("DEBUG: extractErrorDetails - Found response body in field %s (bytes): %q\n", field.Name, responseBody)
+						}
+					case *http.Response:
+						if v != nil && v.Body != nil {
+							// Пытаемся прочитать тело ответа
+							if bodyBytes, err := readResponseBody(v); err == nil && len(bodyBytes) > 0 {
+								responseBody = string(bodyBytes)
+								fmt.Printf("DEBUG: extractErrorDetails - Found response body in field %s (from HTTP response): %q\n", field.Name, responseBody)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Если не нашли статус код, пытаемся извлечь из вложенных структур
+		if statusCode == 0 {
+			for i := 0; i < errValue.NumField(); i++ {
+				fieldValue := errValue.Field(i)
+				if !fieldValue.CanInterface() {
+					continue
+				}
+
+				// Проверяем вложенные структуры
+				if fieldValue.Kind() == reflect.Struct || (fieldValue.Kind() == reflect.Ptr && !fieldValue.IsNil() && fieldValue.Elem().Kind() == reflect.Struct) {
+					var nestedValue reflect.Value
+					if fieldValue.Kind() == reflect.Ptr {
+						nestedValue = fieldValue.Elem()
+					} else {
+						nestedValue = fieldValue
+					}
+
+					nestedType := nestedValue.Type()
+					for j := 0; j < nestedValue.NumField(); j++ {
+						nestedField := nestedType.Field(j)
+						nestedFieldValue := nestedValue.Field(j)
+						if !nestedFieldValue.CanInterface() {
+							continue
+						}
+
+						nestedFieldName := strings.ToLower(nestedField.Name)
+						if (nestedFieldName == "statuscode" || nestedFieldName == "code") && statusCode == 0 {
+							switch v := nestedFieldValue.Interface().(type) {
+							case int:
+								statusCode = v
+							case int32:
+								statusCode = int(v)
+							case int64:
+								statusCode = int(v)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Если всё ещё нет информации, пытаемся извлечь через fmt.Sprintf
+	if statusCode == 0 && responseBody == "" {
+		// Пробуем разные форматы вывода
+		errStrVerbose := fmt.Sprintf("%+v", err)
+		errStrGoSyntax := fmt.Sprintf("%#v", err)
+
+		fmt.Printf("DEBUG: extractErrorDetails - Verbose format: %q\n", errStrVerbose)
+		fmt.Printf("DEBUG: extractErrorDetails - Go syntax format: %q\n", errStrGoSyntax)
+
+		// Пытаемся найти HTTP статус в строковом представлении
+		allFormats := errStrVerbose + " " + errStrGoSyntax
+		if strings.Contains(allFormats, "401") || strings.Contains(allFormats, "Unauthorized") {
+			statusCode = 401
+		} else if strings.Contains(allFormats, "403") || strings.Contains(allFormats, "Forbidden") {
+			statusCode = 403
+		} else if strings.Contains(allFormats, "404") || strings.Contains(allFormats, "Not Found") {
+			statusCode = 404
+		} else if strings.Contains(allFormats, "500") || strings.Contains(allFormats, "Internal Server Error") {
+			statusCode = 500
+		} else if strings.Contains(allFormats, "502") {
+			statusCode = 502
+		} else if strings.Contains(allFormats, "503") {
+			statusCode = 503
+		} else if strings.Contains(allFormats, "504") {
+			statusCode = 504
+		}
+
+		// Пытаемся найти тело ответа в строковом представлении
+		if responseBody == "" && (strings.Contains(errStrVerbose, "{") || strings.Contains(errStrGoSyntax, "{")) {
+			// Возможно, тело ответа есть в JSON формате
+			startIdx := strings.Index(errStrVerbose, "{")
+			if startIdx >= 0 {
+				endIdx := strings.LastIndex(errStrVerbose, "}")
+				if endIdx > startIdx {
+					potentialBody := errStrVerbose[startIdx : endIdx+1]
+					if len(potentialBody) < 500 { // Ограничиваем размер
+						responseBody = potentialBody
+					}
+				}
+			}
+		}
+	}
+
+	return errMsg, statusCode, responseBody
+}
+
+// readResponseBody читает тело HTTP ответа (с ограничением размера для безопасности)
+func readResponseBody(resp *http.Response) ([]byte, error) {
+	if resp.Body == nil {
+		return nil, fmt.Errorf("response body is nil")
+	}
+	defer resp.Body.Close()
+
+	// Ограничиваем чтение до 10KB для безопасности
+	limitedReader := &io.LimitedReader{R: resp.Body, N: 10240}
+	bodyBytes, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return nil, err
+	}
+	return bodyBytes, nil
 }
 
 // IcebergSourceConnector implements SourceConnector for Iceberg REST API
@@ -67,45 +322,132 @@ func (i *IcebergSourceConnector) Connect(ctx context.Context) error {
 		return fmt.Errorf("connector is closed")
 	}
 
-	// Set AWS environment variables for S3 access
-	// These are needed when iceberg-go writes data files directly to S3/MinIO
-	if os.Getenv("AWS_REGION") == "" {
-		os.Setenv("AWS_REGION", "us-east-1")
+	// Validate REST catalog URL
+	if i.config.RESTCatalogURL == "" {
+		return fmt.Errorf("REST catalog URL is required but not provided")
 	}
-	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
-		os.Setenv("AWS_ACCESS_KEY_ID", "admin")
-	}
-	if os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
-		os.Setenv("AWS_SECRET_ACCESS_KEY", "password")
-	}
-	// Set S3 endpoint for MinIO (if not already set)
-	// AWS SDK v2 uses AWS_ENDPOINT_URL_S3 or custom resolver
-	if os.Getenv("AWS_ENDPOINT_URL_S3") == "" {
-		// Try to extract endpoint from REST catalog URL or use default MinIO endpoint
-		// For local development with docker-compose, MinIO is typically at http://localhost:9000
-		// But when running inside container, it should be http://minio:9000
-		// We'll use localhost for now, but this should be configurable
-		os.Setenv("AWS_ENDPOINT_URL_S3", "http://localhost:9000")
+
+	// Log configuration details (without exposing sensitive data)
+	tokenPresent := i.config.Token != ""
+	tokenLength := len(i.config.Token)
+	fmt.Printf("INFO: Iceberg Source - Connecting to REST catalog: %s (token present: %v, token length: %d)\n",
+		i.config.RESTCatalogURL, tokenPresent, tokenLength)
+
+	// Определяем имя каталога из конфигурации или используем значение по умолчанию
+	catalogName := i.config.CatalogName
+	if catalogName == "" {
+		catalogName = "iceberg"
 	}
 
 	// Create REST catalog
 	restCatalog, err := rest.NewCatalog(
 		ctx,
-		"iceberg",
+		catalogName,
 		i.config.RESTCatalogURL,
 		rest.WithOAuthToken(i.config.Token),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create REST catalog: %w", err)
+		// Extract detailed error information
+		errType := fmt.Sprintf("%T", err)
+		errMsg, statusCode, responseBody := extractErrorDetails(err)
+
+		// Try to unwrap error to get more details
+		var unwrappedErr error = err
+		for {
+			if unwrapper, ok := unwrappedErr.(interface{ Unwrap() error }); ok {
+				unwrappedErr = unwrapper.Unwrap()
+				if unwrappedErr == nil {
+					break
+				}
+				// Collect unwrapped error messages
+				if unwrappedMsg := unwrappedErr.Error(); unwrappedMsg != "" && unwrappedMsg != errMsg {
+					errMsg = errMsg + " | unwrapped: " + unwrappedMsg
+				}
+			} else {
+				break
+			}
+		}
+
+		// Build detailed error message
+		detailedMsg := errMsg
+		if statusCode > 0 {
+			detailedMsg = fmt.Sprintf("%s [HTTP %d]", detailedMsg, statusCode)
+		}
+		if responseBody != "" {
+			// Ограничиваем длину тела ответа для логов
+			bodyPreview := responseBody
+			if len(bodyPreview) > 200 {
+				bodyPreview = bodyPreview[:200] + "..."
+			}
+			detailedMsg = fmt.Sprintf("%s | response: %s", detailedMsg, bodyPreview)
+		}
+
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("<empty error message, type: %s>", errType)
+			detailedMsg = errMsg
+		}
+
+		// Log detailed error information for debugging
+		fmt.Printf("ERROR: Iceberg Source - Failed to create REST catalog. URL: %s, Error type: %s, Error message: %s, HTTP status: %d, Token present: %v\n",
+			i.config.RESTCatalogURL, errType, detailedMsg, statusCode, tokenPresent)
+
+		if i.config.Token == "" {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): token is empty, error type: %s, error: %s: %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+
+		// Check HTTP status code first (most reliable indicator)
+		if statusCode > 0 {
+			switch statusCode {
+			case 401:
+				return fmt.Errorf("failed to create REST catalog (URL: %s): authentication failed (HTTP 401 Unauthorized, check token): %w",
+					i.config.RESTCatalogURL, err)
+			case 403:
+				return fmt.Errorf("failed to create REST catalog (URL: %s): authorization failed (HTTP 403 Forbidden, check token permissions): %w",
+					i.config.RESTCatalogURL, err)
+			case 404:
+				return fmt.Errorf("failed to create REST catalog (URL: %s): endpoint not found (HTTP 404, check URL path): %w",
+					i.config.RESTCatalogURL, err)
+			case 500, 502, 503, 504:
+				return fmt.Errorf("failed to create REST catalog (URL: %s): server error (HTTP %d, server may be unavailable): %w",
+					i.config.RESTCatalogURL, statusCode, err)
+			}
+		}
+
+		// Check for common error patterns (case-insensitive)
+		errMsgLower := strings.ToLower(detailedMsg)
+		if strings.Contains(errMsgLower, "connection") || strings.Contains(errMsgLower, "refused") ||
+			strings.Contains(errMsgLower, "timeout") || strings.Contains(errMsgLower, "no such host") {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): connection/network error (type: %s, details: %s): %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+		if strings.Contains(errMsgLower, "certificate") || strings.Contains(errMsgLower, "tls") ||
+			strings.Contains(errMsgLower, "x509") || strings.Contains(errMsgLower, "cert") {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): TLS/certificate error (type: %s, details: %s): %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+		if strings.Contains(errMsgLower, "401") || strings.Contains(errMsgLower, "unauthorized") ||
+			strings.Contains(errMsgLower, "403") || strings.Contains(errMsgLower, "forbidden") {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): authentication/authorization failed (type: %s, details: %s, check token): %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+		if strings.Contains(errMsgLower, "404") || strings.Contains(errMsgLower, "not found") {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): endpoint not found (type: %s, details: %s, check URL): %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+
+		return fmt.Errorf("failed to create REST catalog (URL: %s, error type: %s, error: %s): %w",
+			i.config.RESTCatalogURL, errType, detailedMsg, err)
 	}
 
 	i.catalog = restCatalog
 
-	// Load table
-	tableIdentifier := catalog.ToIdentifier(i.config.Namespace, i.config.Table)
+	// Load table - используем формат catalog.namespace.table для совместимости с Trino
+	tableIdentifier := catalog.ToIdentifier(catalogName, i.config.Namespace, i.config.Table)
 	tbl, err := restCatalog.LoadTable(ctx, tableIdentifier)
 	if err != nil {
-		return fmt.Errorf("failed to load table %s.%s: %w", i.config.Namespace, i.config.Table, err)
+		return fmt.Errorf("failed to load table %s.%s.%s (catalog: %s, namespace: %s, table: %s): %w",
+			catalogName, i.config.Namespace, i.config.Table, catalogName, i.config.Namespace, i.config.Table, err)
 	}
 
 	i.table = tbl
@@ -243,42 +585,142 @@ func (i *IcebergSinkConnector) Connect(ctx context.Context) error {
 		return fmt.Errorf("connector is closed")
 	}
 
-	// Set AWS environment variables for S3 access
-	// These are needed when iceberg-go writes data files directly to S3/MinIO
-	if os.Getenv("AWS_REGION") == "" {
-		os.Setenv("AWS_REGION", "us-east-1")
+	// AWS credentials and S3 endpoint should be provided via environment variables
+	// or Kubernetes secrets mounted as environment variables.
+	// These are needed when iceberg-go writes data files directly to S3/MinIO.
+	// REST catalog only manages metadata, actual data files are written to S3.
+	//
+	// For local development with MinIO, set these environment variables:
+	// - AWS_REGION (defaults to us-east-1 if not set)
+	// - AWS_ACCESS_KEY_ID
+	// - AWS_SECRET_ACCESS_KEY
+	// - AWS_ENDPOINT_URL_S3 (for MinIO, e.g., http://localhost:9000)
+	//
+	// For production (AWS S3, Yandex Object Storage, etc.), credentials should
+	// be provided via IAM roles, environment variables, or mounted secrets.
+
+	// Validate REST catalog URL
+	if i.config.RESTCatalogURL == "" {
+		return fmt.Errorf("REST catalog URL is required but not provided")
 	}
-	if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
-		os.Setenv("AWS_ACCESS_KEY_ID", "admin")
-	}
-	if os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
-		os.Setenv("AWS_SECRET_ACCESS_KEY", "password")
-	}
-	// Set S3 endpoint for MinIO (if not already set)
-	// AWS SDK v2 uses AWS_ENDPOINT_URL_S3 or custom resolver
-	if os.Getenv("AWS_ENDPOINT_URL_S3") == "" {
-		// Try to extract endpoint from REST catalog URL or use default MinIO endpoint
-		// For local development with docker-compose, MinIO is typically at http://localhost:9000
-		// But when running inside container, it should be http://minio:9000
-		// We'll use localhost for now, but this should be configurable
-		os.Setenv("AWS_ENDPOINT_URL_S3", "http://localhost:9000")
+
+	// Log configuration details (without exposing sensitive data)
+	tokenPresent := i.config.Token != ""
+	tokenLength := len(i.config.Token)
+	fmt.Printf("INFO: Iceberg Sink - Connecting to REST catalog: %s (token present: %v, token length: %d)\n",
+		i.config.RESTCatalogURL, tokenPresent, tokenLength)
+
+	// Определяем имя каталога из конфигурации или используем значение по умолчанию
+	catalogName := i.config.CatalogName
+	if catalogName == "" {
+		catalogName = "iceberg"
 	}
 
 	// Create REST catalog
 	restCatalog, err := rest.NewCatalog(
 		ctx,
-		"iceberg",
+		catalogName,
 		i.config.RESTCatalogURL,
 		rest.WithOAuthToken(i.config.Token),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create REST catalog: %w", err)
+		// Extract detailed error information
+		errType := fmt.Sprintf("%T", err)
+		errMsg, statusCode, responseBody := extractErrorDetails(err)
+
+		// Try to unwrap error to get more details
+		var unwrappedErr error = err
+		for {
+			if unwrapper, ok := unwrappedErr.(interface{ Unwrap() error }); ok {
+				unwrappedErr = unwrapper.Unwrap()
+				if unwrappedErr == nil {
+					break
+				}
+				// Collect unwrapped error messages
+				if unwrappedMsg := unwrappedErr.Error(); unwrappedMsg != "" && unwrappedMsg != errMsg {
+					errMsg = errMsg + " | unwrapped: " + unwrappedMsg
+				}
+			} else {
+				break
+			}
+		}
+
+		// Build detailed error message
+		detailedMsg := errMsg
+		if statusCode > 0 {
+			detailedMsg = fmt.Sprintf("%s [HTTP %d]", detailedMsg, statusCode)
+		}
+		if responseBody != "" {
+			// Ограничиваем длину тела ответа для логов
+			bodyPreview := responseBody
+			if len(bodyPreview) > 200 {
+				bodyPreview = bodyPreview[:200] + "..."
+			}
+			detailedMsg = fmt.Sprintf("%s | response: %s", detailedMsg, bodyPreview)
+		}
+
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("<empty error message, type: %s>", errType)
+			detailedMsg = errMsg
+		}
+
+		// Log detailed error information for debugging
+		fmt.Printf("ERROR: Iceberg Sink - Failed to create REST catalog. URL: %s, Error type: %s, Error message: %s, HTTP status: %d, Token present: %v\n",
+			i.config.RESTCatalogURL, errType, detailedMsg, statusCode, tokenPresent)
+
+		if i.config.Token == "" {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): token is empty, error type: %s, error: %s: %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+
+		// Check HTTP status code first (most reliable indicator)
+		if statusCode > 0 {
+			switch statusCode {
+			case 401:
+				return fmt.Errorf("failed to create REST catalog (URL: %s): authentication failed (HTTP 401 Unauthorized, check token): %w",
+					i.config.RESTCatalogURL, err)
+			case 403:
+				return fmt.Errorf("failed to create REST catalog (URL: %s): authorization failed (HTTP 403 Forbidden, check token permissions): %w",
+					i.config.RESTCatalogURL, err)
+			case 404:
+				return fmt.Errorf("failed to create REST catalog (URL: %s): endpoint not found (HTTP 404, check URL path): %w",
+					i.config.RESTCatalogURL, err)
+			case 500, 502, 503, 504:
+				return fmt.Errorf("failed to create REST catalog (URL: %s): server error (HTTP %d, server may be unavailable): %w",
+					i.config.RESTCatalogURL, statusCode, err)
+			}
+		}
+
+		// Check for common error patterns (case-insensitive)
+		errMsgLower := strings.ToLower(detailedMsg)
+		if strings.Contains(errMsgLower, "connection") || strings.Contains(errMsgLower, "refused") ||
+			strings.Contains(errMsgLower, "timeout") || strings.Contains(errMsgLower, "no such host") {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): connection/network error (type: %s, details: %s): %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+		if strings.Contains(errMsgLower, "certificate") || strings.Contains(errMsgLower, "tls") ||
+			strings.Contains(errMsgLower, "x509") || strings.Contains(errMsgLower, "cert") {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): TLS/certificate error (type: %s, details: %s): %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+		if strings.Contains(errMsgLower, "401") || strings.Contains(errMsgLower, "unauthorized") ||
+			strings.Contains(errMsgLower, "403") || strings.Contains(errMsgLower, "forbidden") {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): authentication/authorization failed (type: %s, details: %s, check token): %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+		if strings.Contains(errMsgLower, "404") || strings.Contains(errMsgLower, "not found") {
+			return fmt.Errorf("failed to create REST catalog (URL: %s): endpoint not found (type: %s, details: %s, check URL): %w",
+				i.config.RESTCatalogURL, errType, detailedMsg, err)
+		}
+
+		return fmt.Errorf("failed to create REST catalog (URL: %s, error type: %s, error: %s): %w",
+			i.config.RESTCatalogURL, errType, detailedMsg, err)
 	}
 
 	i.catalog = restCatalog
 
 	// Auto-create namespace if enabled (defaults to true)
-	autoCreateNamespace := true
+	autoCreateNamespace := false
 	if i.config.AutoCreateNamespace != nil {
 		autoCreateNamespace = *i.config.AutoCreateNamespace
 	}
@@ -295,11 +737,12 @@ func (i *IcebergSinkConnector) Connect(ctx context.Context) error {
 		}
 	}
 
-	// Load table
-	tableIdentifier := catalog.ToIdentifier(i.config.Namespace, i.config.Table)
+	// Load table - используем формат catalog.namespace.table для совместимости с Trino
+	tableIdentifier := catalog.ToIdentifier(catalogName, i.config.Namespace, i.config.Table)
 	tbl, err := restCatalog.LoadTable(ctx, tableIdentifier)
 	if err != nil {
-		return fmt.Errorf("failed to load table %s.%s: %w", i.config.Namespace, i.config.Table, err)
+		return fmt.Errorf("failed to load table %s.%s.%s (catalog: %s, namespace: %s, table: %s): %w",
+			catalogName, i.config.Namespace, i.config.Table, catalogName, i.config.Namespace, i.config.Table, err)
 	}
 
 	i.table = tbl
@@ -310,8 +753,15 @@ func (i *IcebergSinkConnector) Connect(ctx context.Context) error {
 func (i *IcebergSinkConnector) ensureNamespace(ctx context.Context) error {
 	fmt.Printf("INFO: Iceberg - Checking namespace: %s\n", i.config.Namespace)
 
+	// Определяем имя каталога из конфигурации или используем значение по умолчанию
+	catalogName := i.config.CatalogName
+	if catalogName == "" {
+		catalogName = "iceberg"
+	}
+
 	// Try to list tables in namespace to check if it exists
-	parentIdent := catalog.ToIdentifier(i.config.Namespace)
+	// Используем формат catalog.namespace для совместимости с Trino
+	parentIdent := catalog.ToIdentifier(catalogName, i.config.Namespace)
 	iter := i.catalog.ListTables(ctx, parentIdent)
 
 	// If we can iterate, namespace exists
@@ -324,7 +774,8 @@ func (i *IcebergSinkConnector) ensureNamespace(ctx context.Context) error {
 	if !hasNext {
 		// Try to create namespace
 		fmt.Printf("INFO: Iceberg - Creating namespace: %s\n", i.config.Namespace)
-		nsIdent := catalog.ToIdentifier(i.config.Namespace)
+		// Используем формат catalog.namespace для совместимости с Trino
+		nsIdent := catalog.ToIdentifier(catalogName, i.config.Namespace)
 		err := i.catalog.CreateNamespace(ctx, nsIdent, nil)
 		if err != nil {
 			// Check if it's an "already exists" error
@@ -347,7 +798,14 @@ func (i *IcebergSinkConnector) ensureNamespace(ctx context.Context) error {
 func (i *IcebergSinkConnector) ensureTable(ctx context.Context) error {
 	fmt.Printf("INFO: Iceberg - Checking table: %s.%s\n", i.config.Namespace, i.config.Table)
 
-	tableIdentifier := catalog.ToIdentifier(i.config.Namespace, i.config.Table)
+	// Определяем имя каталога из конфигурации или используем значение по умолчанию
+	catalogName := i.config.CatalogName
+	if catalogName == "" {
+		catalogName = "iceberg"
+	}
+
+	// Используем формат catalog.namespace.table для совместимости с Trino
+	tableIdentifier := catalog.ToIdentifier(catalogName, i.config.Namespace, i.config.Table)
 
 	// Try to load table to check if it exists
 	_, err := i.catalog.LoadTable(ctx, tableIdentifier)
@@ -401,8 +859,13 @@ func (i *IcebergSinkConnector) ensureTable(ctx context.Context) error {
 			fmt.Printf("INFO: Iceberg - Table %s.%s already exists\n", i.config.Namespace, i.config.Table)
 			return nil
 		}
-		fmt.Printf("ERROR: Iceberg - Failed to create table: %v\n", err)
-		return fmt.Errorf("failed to create table: %w", err)
+		// Format error message with details
+		errMsg := err.Error()
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("unknown error (type: %T)", err)
+		}
+		fmt.Printf("ERROR: Iceberg - Failed to create table %s.%s: %s (type: %T)\n", i.config.Namespace, i.config.Table, errMsg, err)
+		return fmt.Errorf("failed to create table %s.%s: %w", i.config.Namespace, i.config.Table, err)
 	}
 
 	fmt.Printf("INFO: Iceberg - Successfully created table: %s.%s\n", i.config.Namespace, i.config.Table)
@@ -520,7 +983,13 @@ func (i *IcebergSinkConnector) writeBatch(ctx context.Context, tbl *table.Table,
 
 	// Reload table to get the latest metadata before writing
 	// This prevents "branch main was created concurrently" errors
-	tableIdentifier := catalog.ToIdentifier(i.config.Namespace, i.config.Table)
+	// Определяем имя каталога из конфигурации или используем значение по умолчанию
+	catalogName := i.config.CatalogName
+	if catalogName == "" {
+		catalogName = "iceberg"
+	}
+	// Используем формат catalog.namespace.table для совместимости с Trino
+	tableIdentifier := catalog.ToIdentifier(catalogName, i.config.Namespace, i.config.Table)
 	latestTable, err := i.catalog.LoadTable(ctx, tableIdentifier)
 	if err != nil {
 		return fmt.Errorf("failed to reload table before write: %w", err)

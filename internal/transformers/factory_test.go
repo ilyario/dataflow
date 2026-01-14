@@ -346,6 +346,94 @@ func TestCreateTransformer_Remove(t *testing.T) {
 	}
 }
 
+func TestCreateTransformer_SnakeCase(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid snakeCase transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "snakeCase",
+				SnakeCase: &v1.SnakeCaseTransformation{
+					Deep: true,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "snakeCase without config",
+			transformation: &v1.TransformationSpec{
+				Type: "snakeCase",
+			},
+			wantErr:     true,
+			errContains: "snakeCase transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
+func TestCreateTransformer_CamelCase(t *testing.T) {
+	tests := []struct {
+		name           string
+		transformation *v1.TransformationSpec
+		wantErr        bool
+		errContains    string
+	}{
+		{
+			name: "valid camelCase transformation",
+			transformation: &v1.TransformationSpec{
+				Type: "camelCase",
+				CamelCase: &v1.CamelCaseTransformation{
+					Deep: true,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "camelCase without config",
+			transformation: &v1.TransformationSpec{
+				Type: "camelCase",
+			},
+			wantErr:     true,
+			errContains: "camelCase transformation configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transformer, err := CreateTransformer(tt.transformation)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, transformer)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, transformer)
+			}
+		})
+	}
+}
+
 func TestCreateTransformer_UnsupportedType(t *testing.T) {
 	transformation := &v1.TransformationSpec{
 		Type: "unsupported",

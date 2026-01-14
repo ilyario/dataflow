@@ -13,6 +13,8 @@ DataFlow Operator поддерживает различные трансформ
 | Router | Маршрутизирует в разные приемники | 1 сообщение | 0 или 1 сообщение |
 | Select | Выбирает поля | 1 сообщение | 1 сообщение |
 | Remove | Удаляет поля | 1 сообщение | 1 сообщение |
+| SnakeCase | Преобразует ключи в snake_case | 1 сообщение | 1 сообщение |
+| CamelCase | Преобразует ключи в CamelCase | 1 сообщение | 1 сообщение |
 
 ## Timestamp
 
@@ -751,10 +753,11 @@ transformations:
 
 1. **Flatten** должен быть первым, если нужно развернуть массивы
 2. **Filter** применяйте рано, чтобы уменьшить объем обрабатываемых данных
-3. **Mask/Remove** применяйте перед Select для безопасности
-4. **Select** применяйте в конце для финальной очистки
-5. **Timestamp** можно применять в любом месте, но обычно в начале или конце
-6. **Router** обычно применяется в конце, после всех других трансформаций
+3. **SnakeCase/CamelCase** применяйте после Select/Remove, но перед отправкой в приемник
+4. **Mask/Remove** применяйте перед Select для безопасности
+5. **Select** применяйте в конце для финальной очистки
+6. **Timestamp** можно применять в любом месте, но обычно в начале или конце
+7. **Router** обычно применяется в конце, после всех других трансформаций
 
 ## Комбинированные примеры
 
@@ -813,6 +816,51 @@ transformations:
               topic: error-logs
 ```
 
+### Нормализация имен полей
+
+```yaml
+transformations:
+  # Выбрать нужные поля
+  - type: select
+    select:
+      fields:
+        - firstName
+        - lastName
+        - email
+        - address
+
+  # Преобразовать в snake_case для PostgreSQL
+  - type: snakeCase
+    snakeCase:
+      deep: true
+```
+
+**Входное сообщение:**
+```json
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john@example.com",
+  "address": {
+    "streetName": "Main St",
+    "zipCode": "12345"
+  }
+}
+```
+
+**Выходное сообщение:**
+```json
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "email": "john@example.com",
+  "address": {
+    "street_name": "Main St",
+    "zip_code": "12345"
+  }
+}
+```
+
 ## JSONPath поддержка
 
 Все трансформации, работающие с полями, поддерживают JSONPath синтаксис:
@@ -830,9 +878,263 @@ transformations:
 - **Flatten** - может увеличить количество сообщений, используйте осторожно
 - **Router** - создает дополнительные подключения, минимизируйте количество маршрутов
 
+## SnakeCase
+
+Преобразует все ключи JSON-объекта в формат `snake_case`. Полезно для нормализации имен полей при интеграции с системами, использующими snake_case (например, PostgreSQL, Python API).
+
+### Конфигурация
+
+```yaml
+transformations:
+  - type: snakeCase
+    snakeCase:
+      # Рекурсивно преобразовывать вложенные объекты (опционально, по умолчанию: false)
+      deep: true
+```
+
+### Примеры
+
+#### Простое преобразование
+
+```yaml
+transformations:
+  - type: snakeCase
+    snakeCase:
+      deep: false
+```
+
+**Входное сообщение:**
+```json
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "userName": "johndoe",
+  "isActive": true,
+  "itemCount": 42
+}
+```
+
+**Выходное сообщение:**
+```json
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "user_name": "johndoe",
+  "is_active": true,
+  "item_count": 42
+}
+```
+
+#### Рекурсивное преобразование
+
+```yaml
+transformations:
+  - type: snakeCase
+    snakeCase:
+      deep: true
+```
+
+**Входное сообщение:**
+```json
+{
+  "firstName": "John",
+  "address": {
+    "streetName": "Main St",
+    "houseNumber": 123,
+    "zipCode": "12345"
+  },
+  "items": [
+    {
+      "itemName": "Product",
+      "itemPrice": 99.99
+    }
+  ]
+}
+```
+
+**Выходное сообщение:**
+```json
+{
+  "first_name": "John",
+  "address": {
+    "street_name": "Main St",
+    "house_number": 123,
+    "zip_code": "12345"
+  },
+  "items": [
+    {
+      "item_name": "Product",
+      "item_price": 99.99
+    }
+  ]
+}
+```
+
+#### Преобразование PascalCase
+
+```yaml
+transformations:
+  - type: snakeCase
+    snakeCase:
+      deep: false
+```
+
+**Входное сообщение:**
+```json
+{
+  "FirstName": "John",
+  "LastName": "Doe",
+  "UserID": 123
+}
+```
+
+**Выходное сообщение:**
+```json
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "user_id": 123
+}
+```
+
+### Особенности
+
+- Преобразует `camelCase` → `snake_case`
+- Преобразует `PascalCase` → `snake_case`
+- Обрабатывает последовательные заглавные буквы (например, `XMLHttpRequest` → `xml_http_request`)
+- Сохраняет уже существующие ключи в `snake_case` без изменений
+- При `deep: false` преобразует только ключи верхнего уровня
+- При `deep: true` рекурсивно преобразует все вложенные объекты и массивы
+
+## CamelCase
+
+Преобразует все ключи JSON-объекта в формат `CamelCase` (PascalCase). Полезно для нормализации имен полей при интеграции с системами, использующими CamelCase (например, Java, C# API).
+
+### Конфигурация
+
+```yaml
+transformations:
+  - type: camelCase
+    camelCase:
+      # Рекурсивно преобразовывать вложенные объекты (опционально, по умолчанию: false)
+      deep: true
+```
+
+### Примеры
+
+#### Простое преобразование
+
+```yaml
+transformations:
+  - type: camelCase
+    camelCase:
+      deep: false
+```
+
+**Входное сообщение:**
+```json
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "user_name": "johndoe",
+  "is_active": true,
+  "item_count": 42
+}
+```
+
+**Выходное сообщение:**
+```json
+{
+  "FirstName": "John",
+  "LastName": "Doe",
+  "UserName": "johndoe",
+  "IsActive": true,
+  "ItemCount": 42
+}
+```
+
+#### Рекурсивное преобразование
+
+```yaml
+transformations:
+  - type: camelCase
+    camelCase:
+      deep: true
+```
+
+**Входное сообщение:**
+```json
+{
+  "first_name": "John",
+  "address": {
+    "street_name": "Main St",
+    "house_number": 123,
+    "zip_code": "12345"
+  },
+  "items": [
+    {
+      "item_name": "Product",
+      "item_price": 99.99
+    }
+  ]
+}
+```
+
+**Выходное сообщение:**
+```json
+{
+  "FirstName": "John",
+  "Address": {
+    "StreetName": "Main St",
+    "HouseNumber": 123,
+    "ZipCode": "12345"
+  },
+  "Items": [
+    {
+      "ItemName": "Product",
+      "ItemPrice": 99.99
+    }
+  ]
+}
+```
+
+#### Преобразование одиночных слов
+
+```yaml
+transformations:
+  - type: camelCase
+    camelCase:
+      deep: false
+```
+
+**Входное сообщение:**
+```json
+{
+  "name": "John",
+  "id": 123
+}
+```
+
+**Выходное сообщение:**
+```json
+{
+  "Name": "John",
+  "Id": 123
+}
+```
+
+### Особенности
+
+- Преобразует `snake_case` → `CamelCase`
+- Все слова начинаются с заглавной буквы (PascalCase)
+- Сохраняет уже существующие ключи в `CamelCase` без изменений
+- При `deep: false` преобразует только ключи верхнего уровня
+- При `deep: true` рекурсивно преобразует все вложенные объекты и массивы
+
 ## Ограничения
 
 - JSONPath выражения оцениваются последовательно
 - Сложные логические выражения (AND, OR) не поддерживаются напрямую в Filter
 - Router проверяет условия последовательно, первое совпадение определяет маршрут
 - Flatten работает только с массивами, не с объектами
+- SnakeCase и CamelCase работают только с валидным JSON, бинарные данные возвращаются без изменений
