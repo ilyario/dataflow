@@ -922,6 +922,103 @@ func (n *NessieSinkConnector) refreshMetadataLocation(ctx context.Context) error
 	return nil
 }
 
+// updateMetadataLocationInNessie updates the metadata location in Nessie via CommitV2 API
+// This is called after a successful Append to ensure Nessie catalog reflects the latest table state
+func (n *NessieSinkConnector) updateMetadataLocationInNessie(ctx context.Context, newMetadataLocation string) error {
+	if n.nessieClient == nil {
+		return fmt.Errorf("Nessie client is not initialized")
+	}
+
+	branch := n.config.Branch
+	if branch == "" {
+		branch = "main"
+	}
+
+	fmt.Printf("INFO: Nessie - Updating metadata location in Nessie: %s\n", newMetadataLocation)
+
+	// Get current table content to preserve ID and other fields
+	contentKey := openapi.NewContentKey([]string{n.config.Namespace, n.config.Table})
+	contentResp, httpResp, err := n.nessieClient.V2API.GetContentV2(ctx, *contentKey, branch).Execute()
+	if err != nil {
+		return fmt.Errorf("failed to get current table content from Nessie: %w", err)
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to get table content: HTTP %d", httpResp.StatusCode)
+	}
+
+	content := contentResp.GetContent()
+	if content.IcebergTableV2 == nil {
+		return fmt.Errorf("content is not an Iceberg table")
+	}
+
+	currentIcebergTable := content.IcebergTableV2
+
+	// Create new IcebergTable with updated metadata location
+	// Note: Operations uses Content which uses IcebergTable (not V2), but we can convert
+	// Preserve ID and other fields from current table
+	newIcebergTable := openapi.NewIcebergTable(newMetadataLocation)
+	if currentIcebergTable.GetId() != "" {
+		newIcebergTable.SetId(currentIcebergTable.GetId())
+	}
+	if currentIcebergTable.SnapshotId != nil {
+		newIcebergTable.SetSnapshotId(*currentIcebergTable.SnapshotId)
+	}
+	if currentIcebergTable.SchemaId != nil {
+		newIcebergTable.SetSchemaId(*currentIcebergTable.SchemaId)
+	}
+	if currentIcebergTable.SpecId != nil {
+		newIcebergTable.SetSpecId(*currentIcebergTable.SpecId)
+	}
+	if currentIcebergTable.SortOrderId != nil {
+		newIcebergTable.SetSortOrderId(*currentIcebergTable.SortOrderId)
+	}
+
+	// Create Content with new IcebergTable
+	newContent := openapi.Content{
+		IcebergTable: newIcebergTable,
+	}
+
+	// Create Put operation
+	putOp := openapi.NewPut(
+		*openapi.NewContentKey([]string{n.config.Namespace, n.config.Table}),
+		newContent,
+	)
+
+	// Create Operation
+	operation := openapi.PutAsOperation(putOp)
+
+	// Create CommitMeta
+	commitMeta := openapi.NewCommitMeta(
+		[]string{"dataflow"},                    // authors
+		[]string{},                              // allSignedOffBy
+		fmt.Sprintf("Update metadata location for table %s.%s", n.config.Namespace, n.config.Table), // message
+		make(map[string]string),                 // properties
+		make(map[string][]string),               // allProperties
+		[]string{},                              // parentCommitHashes
+	)
+
+	// Create Operations
+	operations := openapi.NewOperations(*commitMeta, []openapi.Operation{operation})
+
+	// Commit via CommitV2 API
+	commitResp, httpResp, err := n.nessieClient.V2API.CommitV2(ctx, branch).Operations(*operations).Execute()
+	if err != nil {
+		return fmt.Errorf("failed to commit metadata location update to Nessie: %w", err)
+	}
+	if httpResp.StatusCode != http.StatusOK && httpResp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("failed to commit metadata location update: HTTP %d", httpResp.StatusCode)
+	}
+
+	fmt.Printf("INFO: Nessie - Successfully updated metadata location in Nessie. Commit hash: %v\n", commitResp)
+	
+	// Update cached metadata location
+	n.mu.Lock()
+	n.metadataLocation = newMetadataLocation
+	n.mu.Unlock()
+
+	return nil
+}
+
 func (n *NessieSinkConnector) writeBatch(ctx context.Context, tbl *table.Table, batch []map[string]interface{}) error {
 	if len(batch) == 0 {
 		return nil
@@ -1097,17 +1194,13 @@ func (n *NessieSinkConnector) writeBatch(ctx context.Context, tbl *table.Table, 
 		reader.Release()
 
 		if err == nil {
-			// Success - update cached table reference and metadata location
+			// Success - UpdateMetadataLocation will be called automatically by iceberg-go
+			// through the CatalogIO interface (nessieCatalogIOImpl.UpdateMetadataLocation)
+			// This ensures Nessie catalog is updated with the new metadata location after Append
+			
+			// Update cached table reference
 			n.mu.Lock()
 			n.table = latestTable
-			// Update metadata location from the table (after Append, metadata may have changed)
-			// Note: The actual metadata location in Nessie should be updated via CommitV2,
-			// but for now we'll use the location from the table object
-			if latestTable != nil {
-				// Try to get the latest metadata location from the table
-				// This is a workaround - ideally we should get it from Nessie after commit
-				fmt.Printf("INFO: Nessie - Successfully wrote batch, table reference updated\n")
-			}
 			n.mu.Unlock()
 			fmt.Printf("INFO: Nessie - Successfully wrote batch of %d messages\n", len(batch))
 			return nil
@@ -1553,8 +1646,25 @@ func (n *nessieCatalogIOImpl) CommitTable(ctx context.Context, ident table.Ident
 // UpdateMetadataLocation updates the metadata location in Nessie after commit
 // This is called by iceberg-go after a successful commit to update the catalog
 func (n *nessieCatalogIOImpl) UpdateMetadataLocation(ctx context.Context, ident table.Identifier, location string) error {
-	// For now, we don't update Nessie here because we handle it separately
-	// This is a no-op implementation to prevent nil pointer panic
-	// The actual metadata location update should be done via Nessie CommitV2 API
+	// This is called by iceberg-go after a successful commit
+	// Update Nessie with the new metadata location
+	if location == "" {
+		return fmt.Errorf("metadata location is empty")
+	}
+
+	// Convert s3a:// to s3:// if needed
+	metadataLocation := location
+	if strings.HasPrefix(location, "s3a://") {
+		metadataLocation = strings.Replace(location, "s3a://", "s3://", 1)
+	}
+
+	fmt.Printf("INFO: Nessie - UpdateMetadataLocation called with location: %s\n", metadataLocation)
+	
+	// Update Nessie catalog with the new metadata location
+	if err := n.connector.updateMetadataLocationInNessie(ctx, metadataLocation); err != nil {
+		fmt.Printf("ERROR: Nessie - Failed to update metadata location in Nessie from UpdateMetadataLocation: %v\n", err)
+		return fmt.Errorf("failed to update metadata location in Nessie: %w", err)
+	}
+
 	return nil
 }
