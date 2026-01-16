@@ -35,16 +35,11 @@ func CreateSourceConnector(source *v1.SourceSpec) (SourceConnector, error) {
 			return nil, fmt.Errorf("postgresql source configuration is required")
 		}
 		return NewPostgreSQLSourceConnector(source.PostgreSQL), nil
-	case "iceberg":
-		if source.Iceberg == nil {
-			return nil, fmt.Errorf("iceberg source configuration is required")
+	case "trino":
+		if source.Trino == nil {
+			return nil, fmt.Errorf("trino source configuration is required")
 		}
-		return NewIcebergSourceConnector(source.Iceberg), nil
-	case "nessie":
-		if source.Nessie == nil {
-			return nil, fmt.Errorf("nessie source configuration is required")
-		}
-		return NewNessieSourceConnector(source.Nessie), nil
+		return NewTrinoSourceConnector(source.Trino), nil
 	default:
 		return nil, fmt.Errorf("unsupported source type: %s", source.Type)
 	}
@@ -63,16 +58,11 @@ func CreateSinkConnector(sink *v1.SinkSpec) (SinkConnector, error) {
 			return nil, fmt.Errorf("postgresql sink configuration is required")
 		}
 		return NewPostgreSQLSinkConnector(sink.PostgreSQL), nil
-	case "iceberg":
-		if sink.Iceberg == nil {
-			return nil, fmt.Errorf("iceberg sink configuration is required")
+	case "trino":
+		if sink.Trino == nil {
+			return nil, fmt.Errorf("trino sink configuration is required")
 		}
-		return NewIcebergSinkConnector(sink.Iceberg), nil
-	case "nessie":
-		if sink.Nessie == nil {
-			return nil, fmt.Errorf("nessie sink configuration is required")
-		}
-		return NewNessieSinkConnector(sink.Nessie), nil
+		return NewTrinoSinkConnector(sink.Trino), nil
 	default:
 		return nil, fmt.Errorf("unsupported sink type: %s", sink.Type)
 	}

@@ -8,8 +8,7 @@ DataFlow Operator supports various connectors for data sources and sinks. Each c
 |-----------|--------|------|----------|
 | Kafka | ✅ | ✅ | Consumer groups, TLS, SASL, Avro, Schema Registry |
 | PostgreSQL | ✅ | ✅ | SQL queries, batch inserts, auto-create tables |
-| Iceberg | ✅ | ✅ | REST API, auto-create namespace/tables |
-| Nessie | ✅ | ✅ | Transactional catalog, S3 backend, auto-create tables |
+| Trino | ✅ | ✅ | SQL queries, Keycloak OAuth2 authentication, batch inserts |
 
 > **Note**: This is a simplified English version. For complete documentation, see the [Russian version](../ru/connectors.md) or refer to the code examples in `config/samples/`.
 
@@ -54,28 +53,18 @@ All connectors support secret references for the following fields:
 - `connectionStringSecretRef` - connection string
 - `tableSecretRef` - table name
 
-#### Iceberg
-- `restCatalogUrlSecretRef` - REST Catalog URL
-- `namespaceSecretRef` - catalog namespace
+#### Trino
+- `serverURLSecretRef` - Trino server URL
+- `catalogSecretRef` - catalog name
+- `schemaSecretRef` - schema name
 - `tableSecretRef` - table name
-- `tokenSecretRef` - authentication token
-- `awsRegionSecretRef` - AWS region
-- `awsAccessKeyIDSecretRef` - AWS access key ID
-- `awsSecretAccessKeySecretRef` - AWS secret access key
-- `awsEndpointURLSecretRef` - AWS S3 endpoint URL (for MinIO)
-
-**Note:** Iceberg connector supports configurable catalog name via `catalogName` parameter (defaults to "iceberg"). This allows using multiple catalogs in one cluster and ensures compatibility with Trino and other systems. Table identifier format: `catalogName.namespace.table`.
-
-#### Nessie
-- `nessieUrlSecretRef` - Nessie server URL
-- `branchSecretRef` - branch name
-- `namespaceSecretRef` - catalog namespace
-- `tableSecretRef` - table name
-- `tokenSecretRef` - authentication token
-- `awsRegionSecretRef` - AWS region
-- `awsAccessKeyIDSecretRef` - AWS access key ID
-- `awsSecretAccessKeySecretRef` - AWS secret access key
-- `awsEndpointURLSecretRef` - AWS S3 endpoint URL (for MinIO)
+- `keycloak.serverURLSecretRef` - Keycloak server URL
+- `keycloak.realmSecretRef` - Keycloak realm name
+- `keycloak.clientIDSecretRef` - OAuth2 client ID
+- `keycloak.clientSecretSecretRef` - OAuth2 client secret
+- `keycloak.usernameSecretRef` - username for password grant
+- `keycloak.passwordSecretRef` - password for password grant
+- `keycloak.tokenSecretRef` - OAuth2 token (for long-lived tokens)
 
 ### Usage Examples
 
@@ -357,104 +346,170 @@ sink:
     # TLS and SASL configuration similar to source
 ```
 
-## Nessie
+## Trino
 
-The Nessie connector supports reading and writing data from/to Iceberg tables through the Nessie transactional catalog. Nessie provides a Git-like versioning model for table metadata, while data is stored in S3-compatible storage. The connector automatically handles metadata through Nessie API and uses AWS SDK for data access in S3.
+The Trino connector supports reading from and writing to Trino (formerly PrestoSQL) tables. It supports SQL queries, Keycloak OAuth2/OIDC authentication, and batch inserts.
 
 ### Source
 
 ```yaml
 source:
-  type: nessie
-  nessie:
-    # Nessie server URL (required)
-    nessieUrl: "http://nessie:19120/api/v2"
-
-    # Branch to read from (optional, defaults to "main")
-    branch: "main"
-
-    # Namespace in the catalog (required)
-    namespace: analytics
-
-    # Table name (required)
+  type: trino
+  trino:
+    # Trino server URL (required)
+    serverURL: "http://trino:8080"
+    
+    # Catalog to use (required)
+    catalog: hive
+    
+    # Schema to use (required)
+    schema: default
+    
+    # Table to read from (required, if not using query)
     table: source_table
-
-    # Authentication token (optional)
-    token: "your-auth-token"
+    
+    # Custom SQL query (optional)
+    # If specified, used instead of reading from table
+    query: "SELECT * FROM hive.default.source_table WHERE id > 100"
+    
+    # Poll interval in seconds (optional, default: 5)
+    # Used for periodic reading of new data
+    pollInterval: 60
+    
+    # Keycloak authentication (optional)
+    keycloak:
+      # Option 1: Use long-lived token directly (recommended for long-lived tokens)
+      token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+      
+      # Option 2: Use OAuth2 flow (alternative to direct token)
+      # serverURL: "https://keycloak.example.com"
+      # realm: myrealm
+      # clientID: trino-client
+      # clientSecret: client-secret
+      # username: trino-user
+      # password: trino-password
 ```
 
-**Features:**
-- **Reading from Iceberg tables**: Uses metadata location from Nessie to load tables
-- **S3 backend**: Automatically works with S3-compatible storage (AWS S3, MinIO, Yandex Object Storage)
-- **s3a:// support**: Automatically converts s3a:// to s3:// for compatibility with iceberg-go
-- **Arrow format**: Uses Apache Arrow for efficient data reading
-- **Branches**: Support for reading from different Nessie branches (default: "main")
+### Features
+
+- **SQL Queries**: Support for custom SQL queries with WHERE, JOIN, etc.
+- **Periodic Polling**: Regularly polls tables for new data
+- **Keycloak Authentication**: OAuth2/OIDC authentication via Keycloak
+  - **Direct Token**: Use a long-lived token obtained from Keycloak (recommended for long-lived tokens)
+  - **Password Grant**: Use username/password for authentication
+  - **Client Credentials**: Use client ID/secret for service-to-service authentication
+- **Automatic Token Refresh**: Tokens are automatically refreshed before expiration (only for OAuth2 flow, not for direct tokens)
+- **Metadata**: Each message contains metadata:
+  - `catalog` - catalog name
+  - `schema` - schema name
+  - `table` - table name
+
+#### Obtaining a Token from Keycloak
+
+To use a long-lived token, you can obtain it from Keycloak using the following methods:
+
+**Method 1: Using curl (Password Grant)**
+```bash
+curl -X POST "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=password" \
+  -d "client_id=trino-client" \
+  -d "client_secret=client-secret" \
+  -d "username=trino-user" \
+  -d "password=trino-password"
+```
+
+**Method 2: Using curl (Client Credentials)**
+```bash
+curl -X POST "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=trino-client" \
+  -d "client_secret=client-secret"
+```
+
+The response will contain an `access_token` field. Use this token value in the `token` field of the Keycloak configuration.
+
+**Note**: For long-lived tokens, configure the token lifespan in Keycloak realm settings or client settings.
 
 ### Sink
 
 ```yaml
 sink:
-  type: nessie
-  nessie:
-    # Nessie server URL (required)
-    nessieUrl: "http://nessie:19120/api/v2"
-
-    # Branch to write to (optional, defaults to "main")
-    branch: "main"
-
-    # Namespace in the catalog (required)
-    namespace: analytics
-
-    # Table name (required)
+  type: trino
+  trino:
+    # Trino server URL (required)
+    serverURL: "http://trino:8080"
+    
+    # Catalog to use (required)
+    catalog: hive
+    
+    # Schema to use (required)
+    schema: default
+    
+    # Table to write to (required)
     table: target_table
-
-    # Authentication token (optional)
-    token: "your-auth-token"
-
-    # Auto-create table (optional, defaults to false)
+    
+    # Batch size for inserts (optional, default: 1)
+    # Increase for better performance
+    batchSize: 100
+    
+    # Auto-create table (optional, default: false)
+    # If true, creates table with VARCHAR column for JSON data
     autoCreateTable: true
+    
+    # Keycloak authentication (optional)
+    keycloak:
+      serverURL: "https://keycloak.example.com"
+      realm: myrealm
+      clientID: trino-client
+      clientSecret: client-secret
+      username: trino-user
+      password: trino-password
 ```
 
-**Features:**
-- **Batch writing**: Groups messages into batches for efficient writing
-- **Auto-create**: Automatically creates tables when needed
-- **Conflict handling**: Automatically handles conflicts during parallel writes with retry mechanism
-- **Arrow format**: Uses Apache Arrow for efficient data serialization
-- **S3 backend**: Automatically works with S3-compatible storage
-- **Branches**: Support for writing to different Nessie branches (default: "main")
-- **Transactions**: Uses Nessie transactional model for atomic operations
+### Features
 
-### S3 Backend Configuration
+- **Batch Inserts**: Groups messages for efficient writing
+- **Auto-create Tables**: Automatically creates tables if they don't exist
+- **Keycloak Authentication**: OAuth2/OIDC authentication via Keycloak
+- **Automatic Token Refresh**: Tokens are automatically refreshed
 
-The Nessie connector requires S3-compatible storage (AWS S3, MinIO, Yandex Object Storage) for storing Iceberg table data. Configure AWS credentials via Kubernetes secrets or environment variables:
+### Example: Kafka to Trino with Keycloak
 
 ```yaml
-sink:
-  type: nessie
-  nessie:
-    nessieUrl: "http://nessie:19120/api/v2"
-    namespace: analytics
-    table: target_table
-    awsRegionSecretRef:
-      name: s3-credentials
-      key: AWS_REGION
-    awsAccessKeyIDSecretRef:
-      name: s3-credentials
-      key: AWS_ACCESS_KEY_ID
-    awsSecretAccessKeySecretRef:
-      name: s3-credentials
-      key: AWS_SECRET_ACCESS_KEY
-    awsEndpointURLSecretRef:
-      name: s3-credentials
-      key: AWS_ENDPOINT_URL_S3
+apiVersion: dataflow.dataflow.io/v1
+kind: DataFlow
+metadata:
+  name: kafka-to-trino
+spec:
+  source:
+    type: kafka
+    kafka:
+      brokers:
+        - kafka:9092
+      topic: input-topic
+      consumerGroup: dataflow-group
+  sink:
+    type: trino
+    trino:
+      serverURL: "http://trino:8080"
+      catalog: hive
+      schema: default
+      table: output_table
+      batchSize: 100
+      keycloak:
+        # Use long-lived token obtained from Keycloak
+        token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+        
+        # Alternative: Use OAuth2 flow
+        # serverURL: "https://keycloak.example.com"
+        # realm: myrealm
+        # clientID: trino-client
+        # clientSecret: client-secret
+        # username: trino-user
+        # password: trino-password
 ```
-
-### Differences from Iceberg REST Catalog
-
-- **Versioning**: Nessie provides Git-like versioning for metadata
-- **Transactions**: Support for transactional operations with metadata
-- **Branches**: Work with branches and tags for version management
-- **Metadata**: Metadata is stored in Nessie, not in REST Catalog
 
 For complete connector documentation, see the [Russian version](../ru/connectors.md).
 

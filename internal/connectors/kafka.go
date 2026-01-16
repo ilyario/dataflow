@@ -35,22 +35,22 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/hamba/avro/v2"
 	v1 "github.com/dataflow-operator/dataflow/api/v1"
 	"github.com/dataflow-operator/dataflow/internal/types"
 	"github.com/go-logr/logr"
+	"github.com/hamba/avro/v2"
 	"github.com/xdg-go/scram"
 )
 
 // KafkaSourceConnector implements SourceConnector for Kafka
 type KafkaSourceConnector struct {
-	config      *v1.KafkaSourceSpec
-	consumer    sarama.ConsumerGroup
-	closed      bool
-	mu          sync.Mutex
-	logger      logr.Logger
-	avroSchema  avro.Schema // Avro schema for deserialization (when not using Schema Registry)
-	schemaCache *schemaCache // Cache for schemas from Schema Registry
+	config       *v1.KafkaSourceSpec
+	consumer     sarama.ConsumerGroup
+	closed       bool
+	mu           sync.Mutex
+	logger       logr.Logger
+	avroSchema   avro.Schema           // Avro schema for deserialization (when not using Schema Registry)
+	schemaCache  *schemaCache          // Cache for schemas from Schema Registry
 	schemaClient *schemaRegistryClient // Client for Schema Registry
 }
 
@@ -382,6 +382,44 @@ func (c *schemaRegistryClient) getSchemaByID(ctx context.Context, schemaID int32
 	return schema, nil
 }
 
+// normalizeAvroArrays recursively normalizes Avro arrays wrapped in objects with "array" field
+// hamba/avro wraps arrays as {"array": [...]}, we convert them back to [...]
+func (k *KafkaSourceConnector) normalizeAvroArrays(data interface{}) interface{} {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		// Check if this is a wrapped array: object with single "array" key that contains an array
+		if len(v) == 1 {
+			if arrayVal, ok := v["array"]; ok {
+				if arr, ok := arrayVal.([]interface{}); ok {
+					// This is a wrapped array, return the array directly
+					// Recursively normalize elements in the array
+					normalized := make([]interface{}, len(arr))
+					for i, item := range arr {
+						normalized[i] = k.normalizeAvroArrays(item)
+					}
+					return normalized
+				}
+			}
+		}
+		// Normal map, normalize all values recursively
+		normalized := make(map[string]interface{})
+		for key, val := range v {
+			normalized[key] = k.normalizeAvroArrays(val)
+		}
+		return normalized
+	case []interface{}:
+		// Array, normalize all elements recursively
+		normalized := make([]interface{}, len(v))
+		for i, item := range v {
+			normalized[i] = k.normalizeAvroArrays(item)
+		}
+		return normalized
+	default:
+		// Primitive value, return as-is
+		return v
+	}
+}
+
 // getCachedSchema gets schema from cache or fetches from Registry
 func (k *KafkaSourceConnector) getCachedSchema(ctx context.Context, schemaID int32) (avro.Schema, error) {
 	// Check cache first
@@ -478,6 +516,16 @@ func (k *KafkaSourceConnector) deserializeAvro(ctx context.Context, data []byte)
 	var result map[string]interface{}
 	if err := avro.Unmarshal(schema, avroData, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal Avro data: %w", err)
+	}
+
+	// Normalize Avro arrays: hamba/avro wraps arrays in objects with "array" field
+	// Convert {"array": [...]} back to [...] for all fields
+	normalized := k.normalizeAvroArrays(result)
+	if normalizedMap, ok := normalized.(map[string]interface{}); ok {
+		result = normalizedMap
+	} else {
+		// This shouldn't happen for top-level objects, but handle it gracefully
+		k.logger.V(1).Info("Normalized result is not a map, using original result")
 	}
 
 	// Convert to JSON

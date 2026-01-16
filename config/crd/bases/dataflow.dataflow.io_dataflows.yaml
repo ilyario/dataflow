@@ -42,185 +42,6 @@ spec:
               sink:
                 description: Sink defines the destination of data
                 properties:
-                  iceberg:
-                    description: Iceberg sink configuration
-                    properties:
-                      autoCreateNamespace:
-                        description: |-
-                          AutoCreateNamespace automatically creates the namespace if it doesn't exist
-                          Defaults to true if not specified
-                        type: boolean
-                      autoCreateTable:
-                        description: AutoCreateTable automatically creates the table
-                          if it doesn't exist
-                        type: boolean
-                      awsAccessKeyIDSecretRef:
-                        description: AWSAccessKeyIDSecretRef references a Kubernetes
-                          secret for AWS access key ID
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsEndpointURLSecretRef:
-                        description: AWSEndpointURLSecretRef references a Kubernetes
-                          secret for AWS S3 endpoint URL (for MinIO)
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsRegionSecretRef:
-                        description: AWSRegionSecretRef references a Kubernetes secret
-                          for AWS region
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsSecretAccessKeySecretRef:
-                        description: AWSSecretAccessKeySecretRef references a Kubernetes
-                          secret for AWS secret access key
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      catalogName:
-                        description: |-
-                          CatalogName is the name of the catalog to use
-                          If not specified, defaults to "iceberg"
-                        type: string
-                      namespace:
-                        description: Namespace in the catalog
-                        type: string
-                      namespaceSecretRef:
-                        description: NamespaceSecretRef references a Kubernetes secret
-                          for namespace
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      restCatalogUrl:
-                        description: RESTCatalogURL is the URL of the Iceberg REST
-                          Catalog
-                        type: string
-                      restCatalogUrlSecretRef:
-                        description: RESTCatalogURLSecretRef references a Kubernetes
-                          secret for REST catalog URL
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      table:
-                        description: Table name
-                        type: string
-                      tableSecretRef:
-                        description: TableSecretRef references a Kubernetes secret
-                          for table name
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      token:
-                        description: Authentication token
-                        type: string
-                      tokenSecretRef:
-                        description: TokenSecretRef references a Kubernetes secret
-                          for authentication token
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                    required:
-                    - namespace
-                    - restCatalogUrl
-                    - table
-                    type: object
                   kafka:
                     description: Kafka sink configuration
                     properties:
@@ -395,201 +216,6 @@ spec:
                     - brokers
                     - topic
                     type: object
-                  nessie:
-                    description: Nessie sink configuration
-                    properties:
-                      autoCreateNamespace:
-                        description: |-
-                          AutoCreateNamespace automatically creates the namespace if it doesn't exist
-                          Defaults to true if not specified
-                        type: boolean
-                      autoCreateTable:
-                        description: AutoCreateTable automatically creates the table
-                          if it doesn't exist
-                        type: boolean
-                      awsAccessKeyIDSecretRef:
-                        description: AWSAccessKeyIDSecretRef references a Kubernetes
-                          secret for AWS access key ID
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsEndpointURLSecretRef:
-                        description: AWSEndpointURLSecretRef references a Kubernetes
-                          secret for AWS S3 endpoint URL (for MinIO)
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsRegionSecretRef:
-                        description: AWSRegionSecretRef references a Kubernetes secret
-                          for AWS region
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsSecretAccessKeySecretRef:
-                        description: AWSSecretAccessKeySecretRef references a Kubernetes
-                          secret for AWS secret access key
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      branch:
-                        description: Branch is the Nessie branch to write to (defaults
-                          to "main")
-                        type: string
-                      branchSecretRef:
-                        description: BranchSecretRef references a Kubernetes secret
-                          for branch name
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      namespace:
-                        description: Namespace in the catalog
-                        type: string
-                      namespaceSecretRef:
-                        description: NamespaceSecretRef references a Kubernetes secret
-                          for namespace
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      nessieUrl:
-                        description: NessieURL is the URL of the Nessie server
-                        type: string
-                      nessieUrlSecretRef:
-                        description: NessieURLSecretRef references a Kubernetes secret
-                          for Nessie URL
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      table:
-                        description: Table name
-                        type: string
-                      tableSecretRef:
-                        description: TableSecretRef references a Kubernetes secret
-                          for table name
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      token:
-                        description: Authentication token
-                        type: string
-                      tokenSecretRef:
-                        description: TokenSecretRef references a Kubernetes secret
-                          for authentication token
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                    required:
-                    - namespace
-                    - nessieUrl
-                    - table
-                    type: object
                   postgresql:
                     description: PostgreSQL sink configuration
                     properties:
@@ -647,101 +273,23 @@ spec:
                     - connectionString
                     - table
                     type: object
-                  type:
-                    description: 'Type of sink: kafka, postgresql, iceberg, nessie'
-                    type: string
-                required:
-                - type
-                type: object
-              source:
-                description: Source defines the source of data
-                properties:
-                  iceberg:
-                    description: Iceberg source configuration
+                  trino:
+                    description: Trino sink configuration
                     properties:
-                      awsAccessKeyIDSecretRef:
-                        description: AWSAccessKeyIDSecretRef references a Kubernetes
-                          secret for AWS access key ID
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsEndpointURLSecretRef:
-                        description: AWSEndpointURLSecretRef references a Kubernetes
-                          secret for AWS S3 endpoint URL (for MinIO)
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsRegionSecretRef:
-                        description: AWSRegionSecretRef references a Kubernetes secret
-                          for AWS region
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsSecretAccessKeySecretRef:
-                        description: AWSSecretAccessKeySecretRef references a Kubernetes
-                          secret for AWS secret access key
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      catalogName:
-                        description: |-
-                          CatalogName is the name of the catalog to use
-                          If not specified, defaults to "iceberg"
+                      autoCreateTable:
+                        description: AutoCreateTable automatically creates the table
+                          if it doesn't exist
+                        type: boolean
+                      batchSize:
+                        description: BatchSize for batch inserts
+                        format: int32
+                        type: integer
+                      catalog:
+                        description: Catalog to use
                         type: string
-                      namespace:
-                        description: Namespace in the catalog
-                        type: string
-                      namespaceSecretRef:
-                        description: NamespaceSecretRef references a Kubernetes secret
-                          for namespace
+                      catalogSecretRef:
+                        description: CatalogSecretRef references a Kubernetes secret
+                          for catalog name
                         properties:
                           key:
                             description: Key in the secret to read the value from
@@ -757,13 +305,195 @@ spec:
                         - key
                         - name
                         type: object
-                      restCatalogUrl:
-                        description: RESTCatalogURL is the URL of the Iceberg REST
-                          Catalog
+                      keycloak:
+                        description: Keycloak authentication configuration
+                        properties:
+                          clientID:
+                            description: ClientID is the OAuth2 client ID
+                            type: string
+                          clientIDSecretRef:
+                            description: ClientIDSecretRef references a Kubernetes
+                              secret for client ID
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          clientSecret:
+                            description: ClientSecret is the OAuth2 client secret
+                              (optional if ClientSecretSecretRef is provided)
+                            type: string
+                          clientSecretSecretRef:
+                            description: ClientSecretSecretRef references a Kubernetes
+                              secret for client secret
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          password:
+                            description: Password for password grant (optional if
+                              PasswordSecretRef is provided)
+                            type: string
+                          passwordSecretRef:
+                            description: PasswordSecretRef references a Kubernetes
+                              secret for password
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          realm:
+                            description: Realm is the Keycloak realm name
+                            type: string
+                          realmSecretRef:
+                            description: RealmSecretRef references a Kubernetes secret
+                              for realm name
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          serverURL:
+                            description: ServerURL is the Keycloak server URL (e.g.,
+                              https://keycloak.example.com/auth)
+                            type: string
+                          serverURLSecretRef:
+                            description: ServerURLSecretRef references a Kubernetes
+                              secret for Keycloak server URL
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          token:
+                            description: |-
+                              Token is a long-lived OAuth2 token obtained from Keycloak (optional if TokenSecretRef is provided)
+                              If provided, this token will be used directly instead of OAuth2 flow
+                            type: string
+                          tokenSecretRef:
+                            description: |-
+                              TokenSecretRef references a Kubernetes secret for OAuth2 token
+                              If provided, this token will be used directly instead of OAuth2 flow
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          username:
+                            description: Username for password grant (optional if
+                              UsernameSecretRef is provided)
+                            type: string
+                          usernameSecretRef:
+                            description: UsernameSecretRef references a Kubernetes
+                              secret for username
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - clientID
+                        - realm
+                        - serverURL
+                        type: object
+                      schema:
+                        description: Schema to use
                         type: string
-                      restCatalogUrlSecretRef:
-                        description: RESTCatalogURLSecretRef references a Kubernetes
-                          secret for REST catalog URL
+                      schemaSecretRef:
+                        description: SchemaSecretRef references a Kubernetes secret
+                          for schema name
+                        properties:
+                          key:
+                            description: Key in the secret to read the value from
+                            type: string
+                          name:
+                            description: Name of the secret
+                            type: string
+                          namespace:
+                            description: Namespace of the secret (optional, defaults
+                              to the same namespace as DataFlow)
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      serverURL:
+                        description: ServerURL is the Trino server URL (e.g., http://trino:8080)
+                        type: string
+                      serverURLSecretRef:
+                        description: ServerURLSecretRef references a Kubernetes secret
+                          for server URL
                         properties:
                           key:
                             description: Key in the secret to read the value from
@@ -780,7 +510,7 @@ spec:
                         - name
                         type: object
                       table:
-                        description: Table name
+                        description: Table to write to
                         type: string
                       tableSecretRef:
                         description: TableSecretRef references a Kubernetes secret
@@ -800,32 +530,21 @@ spec:
                         - key
                         - name
                         type: object
-                      token:
-                        description: Authentication token
-                        type: string
-                      tokenSecretRef:
-                        description: TokenSecretRef references a Kubernetes secret
-                          for authentication token
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
                     required:
-                    - namespace
-                    - restCatalogUrl
+                    - catalog
+                    - schema
+                    - serverURL
                     - table
                     type: object
+                  type:
+                    description: 'Type of sink: kafka, postgresql'
+                    type: string
+                required:
+                - type
+                type: object
+              source:
+                description: Source defines the source of data
+                properties:
                   kafka:
                     description: Kafka source configuration
                     properties:
@@ -1204,192 +923,6 @@ spec:
                     - brokers
                     - topic
                     type: object
-                  nessie:
-                    description: Nessie source configuration
-                    properties:
-                      awsAccessKeyIDSecretRef:
-                        description: AWSAccessKeyIDSecretRef references a Kubernetes
-                          secret for AWS access key ID
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsEndpointURLSecretRef:
-                        description: AWSEndpointURLSecretRef references a Kubernetes
-                          secret for AWS S3 endpoint URL (for MinIO)
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsRegionSecretRef:
-                        description: AWSRegionSecretRef references a Kubernetes secret
-                          for AWS region
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      awsSecretAccessKeySecretRef:
-                        description: AWSSecretAccessKeySecretRef references a Kubernetes
-                          secret for AWS secret access key
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      branch:
-                        description: Branch is the Nessie branch to read from (defaults
-                          to "main")
-                        type: string
-                      branchSecretRef:
-                        description: BranchSecretRef references a Kubernetes secret
-                          for branch name
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      namespace:
-                        description: Namespace in the catalog
-                        type: string
-                      namespaceSecretRef:
-                        description: NamespaceSecretRef references a Kubernetes secret
-                          for namespace
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      nessieUrl:
-                        description: NessieURL is the URL of the Nessie server
-                        type: string
-                      nessieUrlSecretRef:
-                        description: NessieURLSecretRef references a Kubernetes secret
-                          for Nessie URL
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      table:
-                        description: Table name
-                        type: string
-                      tableSecretRef:
-                        description: TableSecretRef references a Kubernetes secret
-                          for table name
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      token:
-                        description: Authentication token
-                        type: string
-                      tokenSecretRef:
-                        description: TokenSecretRef references a Kubernetes secret
-                          for authentication token
-                        properties:
-                          key:
-                            description: Key in the secret to read the value from
-                            type: string
-                          name:
-                            description: Name of the secret
-                            type: string
-                          namespace:
-                            description: Namespace of the secret (optional, defaults
-                              to the same namespace as DataFlow)
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                    required:
-                    - namespace
-                    - nessieUrl
-                    - table
-                    type: object
                   postgresql:
                     description: PostgreSQL source configuration
                     properties:
@@ -1447,8 +980,271 @@ spec:
                     - connectionString
                     - table
                     type: object
+                  trino:
+                    description: Trino source configuration
+                    properties:
+                      catalog:
+                        description: Catalog to use
+                        type: string
+                      catalogSecretRef:
+                        description: CatalogSecretRef references a Kubernetes secret
+                          for catalog name
+                        properties:
+                          key:
+                            description: Key in the secret to read the value from
+                            type: string
+                          name:
+                            description: Name of the secret
+                            type: string
+                          namespace:
+                            description: Namespace of the secret (optional, defaults
+                              to the same namespace as DataFlow)
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      keycloak:
+                        description: Keycloak authentication configuration
+                        properties:
+                          clientID:
+                            description: ClientID is the OAuth2 client ID
+                            type: string
+                          clientIDSecretRef:
+                            description: ClientIDSecretRef references a Kubernetes
+                              secret for client ID
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          clientSecret:
+                            description: ClientSecret is the OAuth2 client secret
+                              (optional if ClientSecretSecretRef is provided)
+                            type: string
+                          clientSecretSecretRef:
+                            description: ClientSecretSecretRef references a Kubernetes
+                              secret for client secret
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          password:
+                            description: Password for password grant (optional if
+                              PasswordSecretRef is provided)
+                            type: string
+                          passwordSecretRef:
+                            description: PasswordSecretRef references a Kubernetes
+                              secret for password
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          realm:
+                            description: Realm is the Keycloak realm name
+                            type: string
+                          realmSecretRef:
+                            description: RealmSecretRef references a Kubernetes secret
+                              for realm name
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          serverURL:
+                            description: ServerURL is the Keycloak server URL (e.g.,
+                              https://keycloak.example.com/auth)
+                            type: string
+                          serverURLSecretRef:
+                            description: ServerURLSecretRef references a Kubernetes
+                              secret for Keycloak server URL
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          token:
+                            description: |-
+                              Token is a long-lived OAuth2 token obtained from Keycloak (optional if TokenSecretRef is provided)
+                              If provided, this token will be used directly instead of OAuth2 flow
+                            type: string
+                          tokenSecretRef:
+                            description: |-
+                              TokenSecretRef references a Kubernetes secret for OAuth2 token
+                              If provided, this token will be used directly instead of OAuth2 flow
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          username:
+                            description: Username for password grant (optional if
+                              UsernameSecretRef is provided)
+                            type: string
+                          usernameSecretRef:
+                            description: UsernameSecretRef references a Kubernetes
+                              secret for username
+                            properties:
+                              key:
+                                description: Key in the secret to read the value from
+                                type: string
+                              name:
+                                description: Name of the secret
+                                type: string
+                              namespace:
+                                description: Namespace of the secret (optional, defaults
+                                  to the same namespace as DataFlow)
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - clientID
+                        - realm
+                        - serverURL
+                        type: object
+                      pollInterval:
+                        description: PollInterval in seconds for polling mode
+                        format: int32
+                        type: integer
+                      query:
+                        description: Query for custom SQL query (optional, if not
+                          provided, reads from table)
+                        type: string
+                      schema:
+                        description: Schema to use
+                        type: string
+                      schemaSecretRef:
+                        description: SchemaSecretRef references a Kubernetes secret
+                          for schema name
+                        properties:
+                          key:
+                            description: Key in the secret to read the value from
+                            type: string
+                          name:
+                            description: Name of the secret
+                            type: string
+                          namespace:
+                            description: Namespace of the secret (optional, defaults
+                              to the same namespace as DataFlow)
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      serverURL:
+                        description: ServerURL is the Trino server URL (e.g., http://trino:8080)
+                        type: string
+                      serverURLSecretRef:
+                        description: ServerURLSecretRef references a Kubernetes secret
+                          for server URL
+                        properties:
+                          key:
+                            description: Key in the secret to read the value from
+                            type: string
+                          name:
+                            description: Name of the secret
+                            type: string
+                          namespace:
+                            description: Namespace of the secret (optional, defaults
+                              to the same namespace as DataFlow)
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      table:
+                        description: Table to read from
+                        type: string
+                      tableSecretRef:
+                        description: TableSecretRef references a Kubernetes secret
+                          for table name
+                        properties:
+                          key:
+                            description: Key in the secret to read the value from
+                            type: string
+                          name:
+                            description: Name of the secret
+                            type: string
+                          namespace:
+                            description: Namespace of the secret (optional, defaults
+                              to the same namespace as DataFlow)
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - catalog
+                    - schema
+                    - serverURL
+                    - table
+                    type: object
                   type:
-                    description: 'Type of source: kafka, postgresql, iceberg, nessie'
+                    description: 'Type of source: kafka, postgresql'
                     type: string
                 required:
                 - type
@@ -1535,195 +1331,6 @@ spec:
                                 description: Sink is the sink configuration for this
                                   route
                                 properties:
-                                  iceberg:
-                                    description: Iceberg sink configuration
-                                    properties:
-                                      autoCreateNamespace:
-                                        description: |-
-                                          AutoCreateNamespace automatically creates the namespace if it doesn't exist
-                                          Defaults to true if not specified
-                                        type: boolean
-                                      autoCreateTable:
-                                        description: AutoCreateTable automatically
-                                          creates the table if it doesn't exist
-                                        type: boolean
-                                      awsAccessKeyIDSecretRef:
-                                        description: AWSAccessKeyIDSecretRef references
-                                          a Kubernetes secret for AWS access key ID
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      awsEndpointURLSecretRef:
-                                        description: AWSEndpointURLSecretRef references
-                                          a Kubernetes secret for AWS S3 endpoint
-                                          URL (for MinIO)
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      awsRegionSecretRef:
-                                        description: AWSRegionSecretRef references
-                                          a Kubernetes secret for AWS region
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      awsSecretAccessKeySecretRef:
-                                        description: AWSSecretAccessKeySecretRef references
-                                          a Kubernetes secret for AWS secret access
-                                          key
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      catalogName:
-                                        description: |-
-                                          CatalogName is the name of the catalog to use
-                                          If not specified, defaults to "iceberg"
-                                        type: string
-                                      namespace:
-                                        description: Namespace in the catalog
-                                        type: string
-                                      namespaceSecretRef:
-                                        description: NamespaceSecretRef references
-                                          a Kubernetes secret for namespace
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      restCatalogUrl:
-                                        description: RESTCatalogURL is the URL of
-                                          the Iceberg REST Catalog
-                                        type: string
-                                      restCatalogUrlSecretRef:
-                                        description: RESTCatalogURLSecretRef references
-                                          a Kubernetes secret for REST catalog URL
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      table:
-                                        description: Table name
-                                        type: string
-                                      tableSecretRef:
-                                        description: TableSecretRef references a Kubernetes
-                                          secret for table name
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      token:
-                                        description: Authentication token
-                                        type: string
-                                      tokenSecretRef:
-                                        description: TokenSecretRef references a Kubernetes
-                                          secret for authentication token
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                    required:
-                                    - namespace
-                                    - restCatalogUrl
-                                    - table
-                                    type: object
                                   kafka:
                                     description: Kafka sink configuration
                                     properties:
@@ -1915,213 +1522,6 @@ spec:
                                     - brokers
                                     - topic
                                     type: object
-                                  nessie:
-                                    description: Nessie sink configuration
-                                    properties:
-                                      autoCreateNamespace:
-                                        description: |-
-                                          AutoCreateNamespace automatically creates the namespace if it doesn't exist
-                                          Defaults to true if not specified
-                                        type: boolean
-                                      autoCreateTable:
-                                        description: AutoCreateTable automatically
-                                          creates the table if it doesn't exist
-                                        type: boolean
-                                      awsAccessKeyIDSecretRef:
-                                        description: AWSAccessKeyIDSecretRef references
-                                          a Kubernetes secret for AWS access key ID
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      awsEndpointURLSecretRef:
-                                        description: AWSEndpointURLSecretRef references
-                                          a Kubernetes secret for AWS S3 endpoint
-                                          URL (for MinIO)
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      awsRegionSecretRef:
-                                        description: AWSRegionSecretRef references
-                                          a Kubernetes secret for AWS region
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      awsSecretAccessKeySecretRef:
-                                        description: AWSSecretAccessKeySecretRef references
-                                          a Kubernetes secret for AWS secret access
-                                          key
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      branch:
-                                        description: Branch is the Nessie branch to
-                                          write to (defaults to "main")
-                                        type: string
-                                      branchSecretRef:
-                                        description: BranchSecretRef references a
-                                          Kubernetes secret for branch name
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      namespace:
-                                        description: Namespace in the catalog
-                                        type: string
-                                      namespaceSecretRef:
-                                        description: NamespaceSecretRef references
-                                          a Kubernetes secret for namespace
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      nessieUrl:
-                                        description: NessieURL is the URL of the Nessie
-                                          server
-                                        type: string
-                                      nessieUrlSecretRef:
-                                        description: NessieURLSecretRef references
-                                          a Kubernetes secret for Nessie URL
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      table:
-                                        description: Table name
-                                        type: string
-                                      tableSecretRef:
-                                        description: TableSecretRef references a Kubernetes
-                                          secret for table name
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                      token:
-                                        description: Authentication token
-                                        type: string
-                                      tokenSecretRef:
-                                        description: TokenSecretRef references a Kubernetes
-                                          secret for authentication token
-                                        properties:
-                                          key:
-                                            description: Key in the secret to read
-                                              the value from
-                                            type: string
-                                          name:
-                                            description: Name of the secret
-                                            type: string
-                                          namespace:
-                                            description: Namespace of the secret (optional,
-                                              defaults to the same namespace as DataFlow)
-                                            type: string
-                                        required:
-                                        - key
-                                        - name
-                                        type: object
-                                    required:
-                                    - namespace
-                                    - nessieUrl
-                                    - table
-                                    type: object
                                   postgresql:
                                     description: PostgreSQL sink configuration
                                     properties:
@@ -2182,9 +1582,294 @@ spec:
                                     - connectionString
                                     - table
                                     type: object
+                                  trino:
+                                    description: Trino sink configuration
+                                    properties:
+                                      autoCreateTable:
+                                        description: AutoCreateTable automatically
+                                          creates the table if it doesn't exist
+                                        type: boolean
+                                      batchSize:
+                                        description: BatchSize for batch inserts
+                                        format: int32
+                                        type: integer
+                                      catalog:
+                                        description: Catalog to use
+                                        type: string
+                                      catalogSecretRef:
+                                        description: CatalogSecretRef references a
+                                          Kubernetes secret for catalog name
+                                        properties:
+                                          key:
+                                            description: Key in the secret to read
+                                              the value from
+                                            type: string
+                                          name:
+                                            description: Name of the secret
+                                            type: string
+                                          namespace:
+                                            description: Namespace of the secret (optional,
+                                              defaults to the same namespace as DataFlow)
+                                            type: string
+                                        required:
+                                        - key
+                                        - name
+                                        type: object
+                                      keycloak:
+                                        description: Keycloak authentication configuration
+                                        properties:
+                                          clientID:
+                                            description: ClientID is the OAuth2 client
+                                              ID
+                                            type: string
+                                          clientIDSecretRef:
+                                            description: ClientIDSecretRef references
+                                              a Kubernetes secret for client ID
+                                            properties:
+                                              key:
+                                                description: Key in the secret to
+                                                  read the value from
+                                                type: string
+                                              name:
+                                                description: Name of the secret
+                                                type: string
+                                              namespace:
+                                                description: Namespace of the secret
+                                                  (optional, defaults to the same
+                                                  namespace as DataFlow)
+                                                type: string
+                                            required:
+                                            - key
+                                            - name
+                                            type: object
+                                          clientSecret:
+                                            description: ClientSecret is the OAuth2
+                                              client secret (optional if ClientSecretSecretRef
+                                              is provided)
+                                            type: string
+                                          clientSecretSecretRef:
+                                            description: ClientSecretSecretRef references
+                                              a Kubernetes secret for client secret
+                                            properties:
+                                              key:
+                                                description: Key in the secret to
+                                                  read the value from
+                                                type: string
+                                              name:
+                                                description: Name of the secret
+                                                type: string
+                                              namespace:
+                                                description: Namespace of the secret
+                                                  (optional, defaults to the same
+                                                  namespace as DataFlow)
+                                                type: string
+                                            required:
+                                            - key
+                                            - name
+                                            type: object
+                                          password:
+                                            description: Password for password grant
+                                              (optional if PasswordSecretRef is provided)
+                                            type: string
+                                          passwordSecretRef:
+                                            description: PasswordSecretRef references
+                                              a Kubernetes secret for password
+                                            properties:
+                                              key:
+                                                description: Key in the secret to
+                                                  read the value from
+                                                type: string
+                                              name:
+                                                description: Name of the secret
+                                                type: string
+                                              namespace:
+                                                description: Namespace of the secret
+                                                  (optional, defaults to the same
+                                                  namespace as DataFlow)
+                                                type: string
+                                            required:
+                                            - key
+                                            - name
+                                            type: object
+                                          realm:
+                                            description: Realm is the Keycloak realm
+                                              name
+                                            type: string
+                                          realmSecretRef:
+                                            description: RealmSecretRef references
+                                              a Kubernetes secret for realm name
+                                            properties:
+                                              key:
+                                                description: Key in the secret to
+                                                  read the value from
+                                                type: string
+                                              name:
+                                                description: Name of the secret
+                                                type: string
+                                              namespace:
+                                                description: Namespace of the secret
+                                                  (optional, defaults to the same
+                                                  namespace as DataFlow)
+                                                type: string
+                                            required:
+                                            - key
+                                            - name
+                                            type: object
+                                          serverURL:
+                                            description: ServerURL is the Keycloak
+                                              server URL (e.g., https://keycloak.example.com/auth)
+                                            type: string
+                                          serverURLSecretRef:
+                                            description: ServerURLSecretRef references
+                                              a Kubernetes secret for Keycloak server
+                                              URL
+                                            properties:
+                                              key:
+                                                description: Key in the secret to
+                                                  read the value from
+                                                type: string
+                                              name:
+                                                description: Name of the secret
+                                                type: string
+                                              namespace:
+                                                description: Namespace of the secret
+                                                  (optional, defaults to the same
+                                                  namespace as DataFlow)
+                                                type: string
+                                            required:
+                                            - key
+                                            - name
+                                            type: object
+                                          token:
+                                            description: |-
+                                              Token is a long-lived OAuth2 token obtained from Keycloak (optional if TokenSecretRef is provided)
+                                              If provided, this token will be used directly instead of OAuth2 flow
+                                            type: string
+                                          tokenSecretRef:
+                                            description: |-
+                                              TokenSecretRef references a Kubernetes secret for OAuth2 token
+                                              If provided, this token will be used directly instead of OAuth2 flow
+                                            properties:
+                                              key:
+                                                description: Key in the secret to
+                                                  read the value from
+                                                type: string
+                                              name:
+                                                description: Name of the secret
+                                                type: string
+                                              namespace:
+                                                description: Namespace of the secret
+                                                  (optional, defaults to the same
+                                                  namespace as DataFlow)
+                                                type: string
+                                            required:
+                                            - key
+                                            - name
+                                            type: object
+                                          username:
+                                            description: Username for password grant
+                                              (optional if UsernameSecretRef is provided)
+                                            type: string
+                                          usernameSecretRef:
+                                            description: UsernameSecretRef references
+                                              a Kubernetes secret for username
+                                            properties:
+                                              key:
+                                                description: Key in the secret to
+                                                  read the value from
+                                                type: string
+                                              name:
+                                                description: Name of the secret
+                                                type: string
+                                              namespace:
+                                                description: Namespace of the secret
+                                                  (optional, defaults to the same
+                                                  namespace as DataFlow)
+                                                type: string
+                                            required:
+                                            - key
+                                            - name
+                                            type: object
+                                        required:
+                                        - clientID
+                                        - realm
+                                        - serverURL
+                                        type: object
+                                      schema:
+                                        description: Schema to use
+                                        type: string
+                                      schemaSecretRef:
+                                        description: SchemaSecretRef references a
+                                          Kubernetes secret for schema name
+                                        properties:
+                                          key:
+                                            description: Key in the secret to read
+                                              the value from
+                                            type: string
+                                          name:
+                                            description: Name of the secret
+                                            type: string
+                                          namespace:
+                                            description: Namespace of the secret (optional,
+                                              defaults to the same namespace as DataFlow)
+                                            type: string
+                                        required:
+                                        - key
+                                        - name
+                                        type: object
+                                      serverURL:
+                                        description: ServerURL is the Trino server
+                                          URL (e.g., http://trino:8080)
+                                        type: string
+                                      serverURLSecretRef:
+                                        description: ServerURLSecretRef references
+                                          a Kubernetes secret for server URL
+                                        properties:
+                                          key:
+                                            description: Key in the secret to read
+                                              the value from
+                                            type: string
+                                          name:
+                                            description: Name of the secret
+                                            type: string
+                                          namespace:
+                                            description: Namespace of the secret (optional,
+                                              defaults to the same namespace as DataFlow)
+                                            type: string
+                                        required:
+                                        - key
+                                        - name
+                                        type: object
+                                      table:
+                                        description: Table to write to
+                                        type: string
+                                      tableSecretRef:
+                                        description: TableSecretRef references a Kubernetes
+                                          secret for table name
+                                        properties:
+                                          key:
+                                            description: Key in the secret to read
+                                              the value from
+                                            type: string
+                                          name:
+                                            description: Name of the secret
+                                            type: string
+                                          namespace:
+                                            description: Namespace of the secret (optional,
+                                              defaults to the same namespace as DataFlow)
+                                            type: string
+                                        required:
+                                        - key
+                                        - name
+                                        type: object
+                                    required:
+                                    - catalog
+                                    - schema
+                                    - serverURL
+                                    - table
+                                    type: object
                                   type:
-                                    description: 'Type of sink: kafka, postgresql,
-                                      iceberg, nessie'
+                                    description: 'Type of sink: kafka, postgresql'
                                     type: string
                                 required:
                                 - type

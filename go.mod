@@ -5,8 +5,6 @@ go 1.25.0
 require (
 	github.com/IBM/sarama v1.46.3
 	github.com/apache/arrow-go/v18 v18.4.1
-	github.com/apache/iceberg-go v0.4.0
-	github.com/dataflow-operator/dataflow/pkg/nessie-client v0.0.0-00010101000000-000000000000
 	github.com/go-logr/logr v1.4.3
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/stretchr/testify v1.11.1
@@ -238,4 +236,3 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/dataflow-operator/dataflow/pkg/nessie-client => ./pkg/nessie-client

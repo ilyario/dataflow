@@ -378,30 +378,6 @@ spec:
                 topic: product-events
 ```
 
-## PostgreSQL → Iceberg с трансформациями
-
-Пример чтения из PostgreSQL, применения трансформаций и записи в Iceberg.
-
-```yaml
-apiVersion: dataflow.dataflow.io/v1
-kind: DataFlow
-metadata:
-  name: postgres-to-iceberg
-spec:
-  source:
-    type: postgresql
-    postgresql:
-      connectionString: "postgres://dataflow:dataflow@postgres:5432/dataflow?sslmode=disable"
-      table: transactions
-      query: "SELECT * FROM transactions WHERE date >= CURRENT_DATE - INTERVAL '7 days'"
-      pollInterval: 3600
-  sink:
-    type: iceberg
-    iceberg:
-      restCatalogUrl: "http://iceberg-rest:8181"
-      namespace: data_warehouse
-      table: transactions
-      token: "your-token"
       autoCreateNamespace: true
       autoCreateTable: true
   transformations:
@@ -642,7 +618,7 @@ status:
 
 ### Производительность
 
-- Используйте `batchSize` для PostgreSQL и Iceberg приемников
+- Используйте `batchSize` для PostgreSQL приемников
 - Настройте правильный `pollInterval` для PostgreSQL источников
 - Используйте несколько инстансов оператора для масштабирования
 
@@ -664,4 +640,3 @@ status:
 - `kafka-to-postgres.yaml` - базовый Kafka → PostgreSQL
 - `flatten-example.yaml` - пример с Flatten трансформацией
 - `router-example.yaml` - пример с Router трансформацией
-- `kafka-to-iceberg-flatten.yaml` - Kafka → Iceberg с Flatten

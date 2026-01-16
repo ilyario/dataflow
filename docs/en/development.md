@@ -51,8 +51,6 @@ docker-compose up -d
 This will start:
 - Kafka (port 9092) with Kafka UI (port 8080)
 - PostgreSQL (port 5432) with pgAdmin (port 5050)
-- Iceberg REST Catalog (port 8181) with UI (port 8081)
-- MinIO (ports 9000, 9001) for Iceberg data storage
 
 ### Running Operator Locally
 

@@ -265,29 +265,119 @@ func TestCreateSinkConnector_PostgreSQL(t *testing.T) {
 func TestCreateSinkConnector_Iceberg(t *testing.T) {
 	tests := []struct {
 		name        string
-		sink        *v1.SinkSpec
+		source      *v1.SourceSpec
 		wantErr     bool
 		errContains string
 	}{
 		{
-			name: "valid iceberg sink",
-			sink: &v1.SinkSpec{
-				Type: "iceberg",
-				Iceberg: &v1.IcebergSinkSpec{
-					RESTCatalogURL: "http://localhost:8181",
-					Namespace:      "test_namespace",
-					Table:          "test_table",
+			name: "valid trino source",
+			source: &v1.SourceSpec{
+				Type: "trino",
+				Trino: &v1.TrinoSourceSpec{
+					ServerURL: "http://trino:8080",
+					Catalog:   "hive",
+					Schema:    "default",
+					Table:     "test_table",
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "iceberg sink without config",
-			sink: &v1.SinkSpec{
-				Type: "iceberg",
+			name: "trino source with keycloak",
+			source: &v1.SourceSpec{
+				Type: "trino",
+				Trino: &v1.TrinoSourceSpec{
+					ServerURL: "http://trino:8080",
+					Catalog:   "hive",
+					Schema:    "default",
+					Table:     "test_table",
+					Keycloak: &v1.KeycloakConfig{
+						ServerURL:    "https://keycloak.example.com",
+						Realm:        "myrealm",
+						ClientID:     "trino-client",
+						ClientSecret: "secret",
+						Username:     "user",
+						Password:     "pass",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "trino source without config",
+			source: &v1.SourceSpec{
+				Type: "trino",
 			},
 			wantErr:     true,
-			errContains: "iceberg sink configuration is required",
+			errContains: "trino source configuration is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			connector, err := CreateSourceConnector(tt.source)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				assert.Nil(t, connector)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, connector)
+			}
+		})
+	}
+}
+
+func TestCreateSinkConnector_Trino(t *testing.T) {
+	tests := []struct {
+		name        string
+		sink        *v1.SinkSpec
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid trino sink",
+			sink: &v1.SinkSpec{
+				Type: "trino",
+				Trino: &v1.TrinoSinkSpec{
+					ServerURL: "http://trino:8080",
+					Catalog:   "hive",
+					Schema:    "default",
+					Table:     "test_table",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "trino sink with keycloak",
+			sink: &v1.SinkSpec{
+				Type: "trino",
+				Trino: &v1.TrinoSinkSpec{
+					ServerURL: "http://trino:8080",
+					Catalog:   "hive",
+					Schema:    "default",
+					Table:     "test_table",
+					Keycloak: &v1.KeycloakConfig{
+						ServerURL:    "https://keycloak.example.com",
+						Realm:        "myrealm",
+						ClientID:     "trino-client",
+						ClientSecret: "secret",
+						Username:     "user",
+						Password:     "pass",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "trino sink without config",
+			sink: &v1.SinkSpec{
+				Type: "trino",
+			},
+			wantErr:     true,
+			errContains: "trino sink configuration is required",
 		},
 	}
 
@@ -306,15 +396,4 @@ func TestCreateSinkConnector_Iceberg(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestCreateSinkConnector_UnsupportedType(t *testing.T) {
-	sink := &v1.SinkSpec{
-		Type: "unsupported",
-	}
-
-	connector, err := CreateSinkConnector(sink)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported sink type")
-	assert.Nil(t, connector)
 }

@@ -1,0 +1,31 @@
+apiVersion: dataflow.dataflow.io/v1
+kind: DataFlow
+metadata:
+  name: kafka-to-trino
+spec:
+  source:
+    type: kafka
+    kafka:
+      brokers:
+        - localhost:9092
+      topic: input-topic
+      consumerGroup: dataflow-group
+  sink:
+    type: trino
+    trino:
+      serverURL: "http://trino:8080"
+      catalog: hive
+      schema: default
+      table: output_table
+      batchSize: 100
+      keycloak:
+        # Option 1: Use long-lived token directly (recommended for long-lived tokens)
+        token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+        # Option 2: Use OAuth2 flow (alternative to direct token)
+        # serverURL: "https://keycloak.example.com"
+        # realm: myrealm
+        # clientID: trino-client
+        # clientSecret: client-secret
+        # username: trino-user
+        # password: trino-password

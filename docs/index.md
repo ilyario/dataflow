@@ -49,7 +49,6 @@ Documentation is available in two languages:
 
 - **Kafka** - read and write messages from/to Kafka topics with TLS and SASL authentication support
 - **PostgreSQL** - read from tables and write to PostgreSQL tables with support for custom SQL queries and batch inserts
-- **Iceberg** - work with Apache Iceberg through REST API for big data processing
 
 ### Rich Transformation Set
 

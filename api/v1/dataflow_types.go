@@ -35,7 +35,7 @@ type DataFlowSpec struct {
 
 // SourceSpec defines the source configuration
 type SourceSpec struct {
-	// Type of source: kafka, postgresql, iceberg, nessie
+	// Type of source: kafka, postgresql
 	Type string `json:"type"`
 
 	// Kafka source configuration
@@ -46,13 +46,9 @@ type SourceSpec struct {
 	// +optional
 	PostgreSQL *PostgreSQLSourceSpec `json:"postgresql,omitempty"`
 
-	// Iceberg source configuration
+	// Trino source configuration
 	// +optional
-	Iceberg *IcebergSourceSpec `json:"iceberg,omitempty"`
-
-	// Nessie source configuration
-	// +optional
-	Nessie *NessieSourceSpec `json:"nessie,omitempty"`
+	Trino *TrinoSourceSpec `json:"trino,omitempty"`
 }
 
 // KafkaSourceSpec defines Kafka source configuration
@@ -170,118 +166,110 @@ type PostgreSQLSourceSpec struct {
 	TableSecretRef *SecretRef `json:"tableSecretRef,omitempty"`
 }
 
-// IcebergSourceSpec defines Iceberg source configuration
-type IcebergSourceSpec struct {
-	// RESTCatalogURL is the URL of the Iceberg REST Catalog
-	RESTCatalogURL string `json:"restCatalogUrl"`
+// TrinoSourceSpec defines Trino source configuration
+type TrinoSourceSpec struct {
+	// ServerURL is the Trino server URL (e.g., http://trino:8080)
+	ServerURL string `json:"serverURL"`
 
-	// CatalogName is the name of the catalog to use
-	// If not specified, defaults to "iceberg"
-	// +optional
-	CatalogName string `json:"catalogName,omitempty"`
+	// Catalog to use
+	Catalog string `json:"catalog"`
 
-	// Namespace in the catalog
-	Namespace string `json:"namespace"`
+	// Schema to use
+	Schema string `json:"schema"`
 
-	// Table name
+	// Table to read from
 	Table string `json:"table"`
 
-	// Authentication token
+	// Query for custom SQL query (optional, if not provided, reads from table)
 	// +optional
-	Token string `json:"token,omitempty"`
+	Query string `json:"query,omitempty"`
 
-	// RESTCatalogURLSecretRef references a Kubernetes secret for REST catalog URL
+	// PollInterval in seconds for polling mode
 	// +optional
-	RESTCatalogURLSecretRef *SecretRef `json:"restCatalogUrlSecretRef,omitempty"`
+	PollInterval *int32 `json:"pollInterval,omitempty"`
 
-	// NamespaceSecretRef references a Kubernetes secret for namespace
+	// Keycloak authentication configuration
 	// +optional
-	NamespaceSecretRef *SecretRef `json:"namespaceSecretRef,omitempty"`
+	Keycloak *KeycloakConfig `json:"keycloak,omitempty"`
+
+	// ServerURLSecretRef references a Kubernetes secret for server URL
+	// +optional
+	ServerURLSecretRef *SecretRef `json:"serverURLSecretRef,omitempty"`
+
+	// CatalogSecretRef references a Kubernetes secret for catalog name
+	// +optional
+	CatalogSecretRef *SecretRef `json:"catalogSecretRef,omitempty"`
+
+	// SchemaSecretRef references a Kubernetes secret for schema name
+	// +optional
+	SchemaSecretRef *SecretRef `json:"schemaSecretRef,omitempty"`
 
 	// TableSecretRef references a Kubernetes secret for table name
 	// +optional
 	TableSecretRef *SecretRef `json:"tableSecretRef,omitempty"`
-
-	// TokenSecretRef references a Kubernetes secret for authentication token
-	// +optional
-	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
-
-	// AWSRegionSecretRef references a Kubernetes secret for AWS region
-	// +optional
-	AWSRegionSecretRef *SecretRef `json:"awsRegionSecretRef,omitempty"`
-
-	// AWSAccessKeyIDSecretRef references a Kubernetes secret for AWS access key ID
-	// +optional
-	AWSAccessKeyIDSecretRef *SecretRef `json:"awsAccessKeyIDSecretRef,omitempty"`
-
-	// AWSSecretAccessKeySecretRef references a Kubernetes secret for AWS secret access key
-	// +optional
-	AWSSecretAccessKeySecretRef *SecretRef `json:"awsSecretAccessKeySecretRef,omitempty"`
-
-	// AWSEndpointURLSecretRef references a Kubernetes secret for AWS S3 endpoint URL (for MinIO)
-	// +optional
-	AWSEndpointURLSecretRef *SecretRef `json:"awsEndpointURLSecretRef,omitempty"`
 }
 
-// NessieSourceSpec defines Nessie source configuration
-type NessieSourceSpec struct {
-	// NessieURL is the URL of the Nessie server
-	NessieURL string `json:"nessieUrl"`
+// KeycloakConfig defines Keycloak OAuth2/OIDC authentication configuration
+type KeycloakConfig struct {
+	// ServerURL is the Keycloak server URL (e.g., https://keycloak.example.com/auth)
+	ServerURL string `json:"serverURL"`
 
-	// Branch is the Nessie branch to read from (defaults to "main")
+	// Realm is the Keycloak realm name
+	Realm string `json:"realm"`
+
+	// ClientID is the OAuth2 client ID
+	ClientID string `json:"clientID"`
+
+	// ClientSecret is the OAuth2 client secret (optional if ClientSecretSecretRef is provided)
 	// +optional
-	Branch string `json:"branch,omitempty"`
+	ClientSecret string `json:"clientSecret,omitempty"`
 
-	// Namespace in the catalog
-	Namespace string `json:"namespace"`
+	// Username for password grant (optional if UsernameSecretRef is provided)
+	// +optional
+	Username string `json:"username,omitempty"`
 
-	// Table name
-	Table string `json:"table"`
+	// Password for password grant (optional if PasswordSecretRef is provided)
+	// +optional
+	Password string `json:"password,omitempty"`
 
-	// Authentication token
+	// Token is a long-lived OAuth2 token obtained from Keycloak (optional if TokenSecretRef is provided)
+	// If provided, this token will be used directly instead of OAuth2 flow
 	// +optional
 	Token string `json:"token,omitempty"`
 
-	// NessieURLSecretRef references a Kubernetes secret for Nessie URL
+	// ServerURLSecretRef references a Kubernetes secret for Keycloak server URL
 	// +optional
-	NessieURLSecretRef *SecretRef `json:"nessieUrlSecretRef,omitempty"`
+	ServerURLSecretRef *SecretRef `json:"serverURLSecretRef,omitempty"`
 
-	// BranchSecretRef references a Kubernetes secret for branch name
+	// RealmSecretRef references a Kubernetes secret for realm name
 	// +optional
-	BranchSecretRef *SecretRef `json:"branchSecretRef,omitempty"`
+	RealmSecretRef *SecretRef `json:"realmSecretRef,omitempty"`
 
-	// NamespaceSecretRef references a Kubernetes secret for namespace
+	// ClientIDSecretRef references a Kubernetes secret for client ID
 	// +optional
-	NamespaceSecretRef *SecretRef `json:"namespaceSecretRef,omitempty"`
+	ClientIDSecretRef *SecretRef `json:"clientIDSecretRef,omitempty"`
 
-	// TableSecretRef references a Kubernetes secret for table name
+	// ClientSecretSecretRef references a Kubernetes secret for client secret
 	// +optional
-	TableSecretRef *SecretRef `json:"tableSecretRef,omitempty"`
+	ClientSecretSecretRef *SecretRef `json:"clientSecretSecretRef,omitempty"`
 
-	// TokenSecretRef references a Kubernetes secret for authentication token
+	// UsernameSecretRef references a Kubernetes secret for username
+	// +optional
+	UsernameSecretRef *SecretRef `json:"usernameSecretRef,omitempty"`
+
+	// PasswordSecretRef references a Kubernetes secret for password
+	// +optional
+	PasswordSecretRef *SecretRef `json:"passwordSecretRef,omitempty"`
+
+	// TokenSecretRef references a Kubernetes secret for OAuth2 token
+	// If provided, this token will be used directly instead of OAuth2 flow
 	// +optional
 	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
-
-	// AWSRegionSecretRef references a Kubernetes secret for AWS region
-	// +optional
-	AWSRegionSecretRef *SecretRef `json:"awsRegionSecretRef,omitempty"`
-
-	// AWSAccessKeyIDSecretRef references a Kubernetes secret for AWS access key ID
-	// +optional
-	AWSAccessKeyIDSecretRef *SecretRef `json:"awsAccessKeyIDSecretRef,omitempty"`
-
-	// AWSSecretAccessKeySecretRef references a Kubernetes secret for AWS secret access key
-	// +optional
-	AWSSecretAccessKeySecretRef *SecretRef `json:"awsSecretAccessKeySecretRef,omitempty"`
-
-	// AWSEndpointURLSecretRef references a Kubernetes secret for AWS S3 endpoint URL (for MinIO)
-	// +optional
-	AWSEndpointURLSecretRef *SecretRef `json:"awsEndpointURLSecretRef,omitempty"`
 }
 
 // SinkSpec defines the sink configuration
 type SinkSpec struct {
-	// Type of sink: kafka, postgresql, iceberg, nessie
+	// Type of sink: kafka, postgresql
 	Type string `json:"type"`
 
 	// Kafka sink configuration
@@ -292,13 +280,9 @@ type SinkSpec struct {
 	// +optional
 	PostgreSQL *PostgreSQLSinkSpec `json:"postgresql,omitempty"`
 
-	// Iceberg sink configuration
+	// Trino sink configuration
 	// +optional
-	Iceberg *IcebergSinkSpec `json:"iceberg,omitempty"`
-
-	// Nessie sink configuration
-	// +optional
-	Nessie *NessieSinkSpec `json:"nessie,omitempty"`
+	Trino *TrinoSinkSpec `json:"trino,omitempty"`
 }
 
 // KafkaSinkSpec defines Kafka sink configuration
@@ -351,131 +335,47 @@ type PostgreSQLSinkSpec struct {
 	TableSecretRef *SecretRef `json:"tableSecretRef,omitempty"`
 }
 
-// IcebergSinkSpec defines Iceberg sink configuration
-type IcebergSinkSpec struct {
-	// RESTCatalogURL is the URL of the Iceberg REST Catalog
-	RESTCatalogURL string `json:"restCatalogUrl"`
+// TrinoSinkSpec defines Trino sink configuration
+type TrinoSinkSpec struct {
+	// ServerURL is the Trino server URL (e.g., http://trino:8080)
+	ServerURL string `json:"serverURL"`
 
-	// CatalogName is the name of the catalog to use
-	// If not specified, defaults to "iceberg"
-	// +optional
-	CatalogName string `json:"catalogName,omitempty"`
+	// Catalog to use
+	Catalog string `json:"catalog"`
 
-	// Namespace in the catalog
-	Namespace string `json:"namespace"`
+	// Schema to use
+	Schema string `json:"schema"`
 
-	// Table name
+	// Table to write to
 	Table string `json:"table"`
 
-	// Authentication token
+	// BatchSize for batch inserts
 	// +optional
-	Token string `json:"token,omitempty"`
-
-	// AutoCreateNamespace automatically creates the namespace if it doesn't exist
-	// Defaults to true if not specified
-	// +optional
-	AutoCreateNamespace *bool `json:"autoCreateNamespace,omitempty"`
+	BatchSize *int32 `json:"batchSize,omitempty"`
 
 	// AutoCreateTable automatically creates the table if it doesn't exist
 	// +optional
 	AutoCreateTable *bool `json:"autoCreateTable,omitempty"`
 
-	// RESTCatalogURLSecretRef references a Kubernetes secret for REST catalog URL
+	// Keycloak authentication configuration
 	// +optional
-	RESTCatalogURLSecretRef *SecretRef `json:"restCatalogUrlSecretRef,omitempty"`
+	Keycloak *KeycloakConfig `json:"keycloak,omitempty"`
 
-	// NamespaceSecretRef references a Kubernetes secret for namespace
+	// ServerURLSecretRef references a Kubernetes secret for server URL
 	// +optional
-	NamespaceSecretRef *SecretRef `json:"namespaceSecretRef,omitempty"`
+	ServerURLSecretRef *SecretRef `json:"serverURLSecretRef,omitempty"`
+
+	// CatalogSecretRef references a Kubernetes secret for catalog name
+	// +optional
+	CatalogSecretRef *SecretRef `json:"catalogSecretRef,omitempty"`
+
+	// SchemaSecretRef references a Kubernetes secret for schema name
+	// +optional
+	SchemaSecretRef *SecretRef `json:"schemaSecretRef,omitempty"`
 
 	// TableSecretRef references a Kubernetes secret for table name
 	// +optional
 	TableSecretRef *SecretRef `json:"tableSecretRef,omitempty"`
-
-	// TokenSecretRef references a Kubernetes secret for authentication token
-	// +optional
-	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
-
-	// AWSRegionSecretRef references a Kubernetes secret for AWS region
-	// +optional
-	AWSRegionSecretRef *SecretRef `json:"awsRegionSecretRef,omitempty"`
-
-	// AWSAccessKeyIDSecretRef references a Kubernetes secret for AWS access key ID
-	// +optional
-	AWSAccessKeyIDSecretRef *SecretRef `json:"awsAccessKeyIDSecretRef,omitempty"`
-
-	// AWSSecretAccessKeySecretRef references a Kubernetes secret for AWS secret access key
-	// +optional
-	AWSSecretAccessKeySecretRef *SecretRef `json:"awsSecretAccessKeySecretRef,omitempty"`
-
-	// AWSEndpointURLSecretRef references a Kubernetes secret for AWS S3 endpoint URL (for MinIO)
-	// +optional
-	AWSEndpointURLSecretRef *SecretRef `json:"awsEndpointURLSecretRef,omitempty"`
-}
-
-// NessieSinkSpec defines Nessie sink configuration
-type NessieSinkSpec struct {
-	// NessieURL is the URL of the Nessie server
-	NessieURL string `json:"nessieUrl"`
-
-	// Branch is the Nessie branch to write to (defaults to "main")
-	// +optional
-	Branch string `json:"branch,omitempty"`
-
-	// Namespace in the catalog
-	Namespace string `json:"namespace"`
-
-	// Table name
-	Table string `json:"table"`
-
-	// Authentication token
-	// +optional
-	Token string `json:"token,omitempty"`
-
-	// AutoCreateNamespace automatically creates the namespace if it doesn't exist
-	// Defaults to true if not specified
-	// +optional
-	AutoCreateNamespace *bool `json:"autoCreateNamespace,omitempty"`
-
-	// AutoCreateTable automatically creates the table if it doesn't exist
-	// +optional
-	AutoCreateTable *bool `json:"autoCreateTable,omitempty"`
-
-	// NessieURLSecretRef references a Kubernetes secret for Nessie URL
-	// +optional
-	NessieURLSecretRef *SecretRef `json:"nessieUrlSecretRef,omitempty"`
-
-	// BranchSecretRef references a Kubernetes secret for branch name
-	// +optional
-	BranchSecretRef *SecretRef `json:"branchSecretRef,omitempty"`
-
-	// NamespaceSecretRef references a Kubernetes secret for namespace
-	// +optional
-	NamespaceSecretRef *SecretRef `json:"namespaceSecretRef,omitempty"`
-
-	// TableSecretRef references a Kubernetes secret for table name
-	// +optional
-	TableSecretRef *SecretRef `json:"tableSecretRef,omitempty"`
-
-	// TokenSecretRef references a Kubernetes secret for authentication token
-	// +optional
-	TokenSecretRef *SecretRef `json:"tokenSecretRef,omitempty"`
-
-	// AWSRegionSecretRef references a Kubernetes secret for AWS region
-	// +optional
-	AWSRegionSecretRef *SecretRef `json:"awsRegionSecretRef,omitempty"`
-
-	// AWSAccessKeyIDSecretRef references a Kubernetes secret for AWS access key ID
-	// +optional
-	AWSAccessKeyIDSecretRef *SecretRef `json:"awsAccessKeyIDSecretRef,omitempty"`
-
-	// AWSSecretAccessKeySecretRef references a Kubernetes secret for AWS secret access key
-	// +optional
-	AWSSecretAccessKeySecretRef *SecretRef `json:"awsSecretAccessKeySecretRef,omitempty"`
-
-	// AWSEndpointURLSecretRef references a Kubernetes secret for AWS S3 endpoint URL (for MinIO)
-	// +optional
-	AWSEndpointURLSecretRef *SecretRef `json:"awsEndpointURLSecretRef,omitempty"`
 }
 
 // SecretRef references a Kubernetes secret

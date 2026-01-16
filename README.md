@@ -1,10 +1,10 @@
 # DataFlow Operator
 
-Kubernetes operator for streaming data between different sources (Kafka, PostgreSQL, Iceberg) with support for message transformations.
+Kubernetes operator for streaming data between different sources (Kafka, PostgreSQL, Trino) with support for message transformations.
 
 ## Features
 
-- **Multiple Data Sources**: Kafka, PostgreSQL, Iceberg
+- **Multiple Data Sources**: Kafka, PostgreSQL, Trino
 - **Message Transformations**:
   - Timestamp - add timestamp to messages
   - Flatten - expand arrays into separate messages
@@ -13,6 +13,8 @@ Kubernetes operator for streaming data between different sources (Kafka, Postgre
   - Router - route to different sinks
   - Select - select specific fields
   - Remove - remove fields
+  - SnakeCase - convert field names to snake_case
+  - CamelCase - convert field names to CamelCase
 - **Kubernetes Secrets Support**: Configure connectors using `SecretRef` for secure credential management
 
 ## Quick Start
@@ -95,7 +97,6 @@ docker-compose up -d
 Available UIs:
 - **Kafka UI**: http://localhost:8080
 - **pgAdmin**: http://localhost:5050 (admin@admin.com / admin)
-- **Iceberg REST UI**: http://localhost:8081
 
 2. Run the operator:
 ```bash

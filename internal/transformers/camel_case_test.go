@@ -73,9 +73,9 @@ func TestCamelCaseTransformer_Transform(t *testing.T) {
 			input: map[string]interface{}{
 				"first_name": "John",
 				"address": map[string]interface{}{
-					"street_name": "Main St",
+					"street_name":  "Main St",
 					"house_number": 123,
-					"zip_code":    "12345",
+					"zip_code":     "12345",
 				},
 				"items": []interface{}{
 					map[string]interface{}{

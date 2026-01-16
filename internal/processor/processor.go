@@ -79,6 +79,11 @@ func NewProcessorWithLogger(spec *v1.DataFlowSpec, logger logr.Logger) (*Process
 			return nil, fmt.Errorf("failed to create transformer %s: %w", t.Type, err)
 		}
 
+		// Set logger if transformer supports it
+		if loggerTransformer, ok := transformer.(interface{ SetLogger(logr.Logger) }); ok {
+			loggerTransformer.SetLogger(logger)
+		}
+
 		// Check if this is a router transformer
 		if t.Type == "router" && t.Router != nil {
 			// Store sink specs for each route
@@ -156,24 +161,51 @@ func (p *Processor) processMessages(ctx context.Context, input <-chan *types.Mes
 			messages := []*types.Message{msg}
 			for i, transformer := range p.transformers {
 				newMessages := make([]*types.Message, 0)
+				inputCount := len(messages)
 				for _, m := range messages {
-					p.logger.V(1).Info("Applying transformer", "index", i, "message", string(m.Data))
+					p.logger.V(1).Info("Applying transformer",
+						"transformerIndex", i,
+						"inputMessageSize", len(m.Data),
+						"inputMessagePreview", string(m.Data)[:min(200, len(m.Data))])
+
 					transformed, err := transformer.Transform(ctx, m)
 					if err != nil {
-						p.logger.Error(err, "Transformation failed", "message", string(m.Data))
+						p.logger.Error(err, "Transformation failed",
+							"transformerIndex", i,
+							"message", string(m.Data))
 						p.mu.Lock()
 						p.errorCount++
 						p.mu.Unlock()
 						continue
 					}
-					// Log routing metadata after router transformation
-					for _, tmsg := range transformed {
+
+					// Log transformation results
+					for j, tmsg := range transformed {
+						p.logger.V(1).Info("Transformation result",
+							"transformerIndex", i,
+							"outputMessageIndex", j,
+							"outputMessageSize", len(tmsg.Data),
+							"outputMessagePreview", string(tmsg.Data)[:min(200, len(tmsg.Data))])
+
+						// Log routing metadata after router transformation
 						if routedCond, ok := tmsg.Metadata["routed_condition"].(string); ok {
-							p.logger.Info("Router set routed_condition", "condition", routedCond, "message", string(tmsg.Data))
+							p.logger.Info("Router set routed_condition",
+								"condition", routedCond,
+								"message", string(tmsg.Data))
 						}
 					}
+
 					newMessages = append(newMessages, transformed...)
 				}
+
+				// Log transformation summary
+				if len(newMessages) != inputCount {
+					p.logger.V(1).Info("Transformation changed message count",
+						"transformerIndex", i,
+						"inputMessages", inputCount,
+						"outputMessages", len(newMessages))
+				}
+
 				messages = newMessages
 			}
 
@@ -304,6 +336,14 @@ func (p *Processor) writeMessages(ctx context.Context, messages <-chan *types.Me
 	}
 	p.logger.Info("Successfully completed writing messages to sink")
 	return nil
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // GetStats returns processing statistics

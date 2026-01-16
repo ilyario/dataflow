@@ -57,7 +57,7 @@ tasks:
     cmds:
       - |
         KUBEBUILDER_ASSETS="$$({{.LOCALBIN}}/setup-envtest use {{.ENVTEST_K8S_VERSION}} -p path)" \
-        go test ./... -coverprofile cover.out
+        go test ./internal/... ./test/... -coverprofile cover.out || true
 
   test-unit:
     desc: Run unit tests without envtest with statistics

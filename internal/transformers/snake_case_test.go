@@ -40,11 +40,11 @@ func TestSnakeCaseTransformer_Transform(t *testing.T) {
 				Deep: false,
 			},
 			input: map[string]interface{}{
-				"firstName":  "John",
-				"lastName":   "Doe",
-				"userName":   "johndoe",
-				"isActive":   true,
-				"itemCount":  42,
+				"firstName": "John",
+				"lastName":  "Doe",
+				"userName":  "johndoe",
+				"isActive":  true,
+				"itemCount": 42,
 			},
 			checkFunc: func(t *testing.T, output []*types.Message, err error) {
 				require.NoError(t, err)
@@ -96,13 +96,13 @@ func TestSnakeCaseTransformer_Transform(t *testing.T) {
 			input: map[string]interface{}{
 				"firstName": "John",
 				"address": map[string]interface{}{
-					"streetName": "Main St",
+					"streetName":  "Main St",
 					"houseNumber": 123,
-					"zipCode":    "12345",
+					"zipCode":     "12345",
 				},
 				"items": []interface{}{
 					map[string]interface{}{
-						"itemName": "Product",
+						"itemName":  "Product",
 						"itemPrice": 99.99,
 					},
 				},

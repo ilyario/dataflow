@@ -12,7 +12,7 @@ DataFlow Operator allows you to declaratively define data flows between differen
 
 - **Kafka** - read and write messages from/to Kafka topics with TLS and SASL authentication support
 - **PostgreSQL** - read from tables and write to PostgreSQL tables with support for custom SQL queries and batch inserts
-- **Iceberg** - work with Apache Iceberg through REST API for big data processing
+- **Trino** - read from tables and write to Trino tables with support for SQL queries, Keycloak OAuth2 authentication, and batch inserts
 
 ### Rich Transformation Set
 
@@ -23,6 +23,8 @@ DataFlow Operator allows you to declaratively define data flows between differen
 - **Router** - route messages to different sinks based on conditions
 - **Select** - select specific fields from messages
 - **Remove** - remove specified fields from messages
+- **SnakeCase** - convert field names to snake_case
+- **CamelCase** - convert field names to CamelCase
 
 ### Flexible Routing
 
@@ -71,7 +73,7 @@ kubectl describe dataflow kafka-to-postgres
 For local development and testing:
 
 ```bash
-# Start dependencies (Kafka, PostgreSQL, Iceberg)
+# Start dependencies (Kafka, PostgreSQL)
 docker-compose up -d
 
 # Run operator locally
@@ -119,12 +121,13 @@ Message processing orchestrator that coordinates the work of source, transformat
 - Automatic table creation
 - JSONB support for flexible schema
 
-### Iceberg
+### Trino
 
-- REST API integration
-- Automatic namespace and table creation
-- Authentication token support
-- Optimized for big data processing
+- Custom SQL queries for sources
+- Periodic polling with configurable interval
+- Batch inserts for improved performance
+- Automatic table creation
+- Keycloak OAuth2/OIDC authentication
 
 ## Security
 
@@ -134,7 +137,7 @@ All connectors support configuration from Kubernetes Secrets through `*SecretRef
 
 - **Kafka**: brokers, topic, consumerGroup, SASL credentials, TLS certificates
 - **PostgreSQL**: connectionString, table
-- **Iceberg**: restCatalogUrl, namespace, table, token
+- **Trino**: serverURL, catalog, schema, table, Keycloak credentials
 
 This enables:
 - Secure storage of sensitive data
@@ -175,6 +178,14 @@ Selects only specified fields from messages, reducing data size and improving pe
 ### Remove
 
 Removes specified fields from messages, useful for data cleanup before sending.
+
+### SnakeCase
+
+Converts field names to snake_case format. Supports recursive conversion of nested objects.
+
+### CamelCase
+
+Converts field names to CamelCase format. Supports recursive conversion of nested objects.
 
 ## Monitoring and Status
 

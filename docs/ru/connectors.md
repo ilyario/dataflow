@@ -8,8 +8,7 @@ DataFlow Operator поддерживает различные коннектор
 |-----------|----------|----------|-------------|
 | Kafka | ✅ | ✅ | Consumer groups, TLS, SASL, Avro, Schema Registry |
 | PostgreSQL | ✅ | ✅ | SQL запросы, батч-вставки, автосоздание таблиц |
-| Iceberg | ✅ | ✅ | REST API, автосоздание namespace/таблиц |
-| Nessie | ✅ | ✅ | Транзакционный каталог, S3 backend, автосоздание таблиц |
+| Trino | ✅ | ✅ | SQL запросы, аутентификация Keycloak OAuth2, батч-вставки |
 
 ## Kafka
 
@@ -310,163 +309,286 @@ CREATE TABLE events (
 CREATE INDEX idx_events_data ON events USING GIN (data);
 ```
 
-## Iceberg
+## Trino
 
-Iceberg коннектор работает с Apache Iceberg через REST API. Оптимизирован для работы с большими данными и поддерживает автоматическое создание namespace и таблиц. Имя каталога можно настроить через параметр `catalogName` (по умолчанию: "iceberg"). Это позволяет использовать несколько каталогов в одном кластере и обеспечивает совместимость с Trino и другими системами.
+Trino коннектор поддерживает чтение из таблиц и запись в таблицы Trino (ранее PrestoSQL). Поддерживает SQL запросы, аутентификацию через Keycloak OAuth2/OIDC и батч-вставки.
 
 ### Источник (Source)
 
-Конфигурация Iceberg источника:
+Конфигурация Trino источника:
 
 ```yaml
 source:
-  type: iceberg
-  iceberg:
-    # URL REST Catalog (обязательно)
-    restCatalogUrl: "http://iceberg-rest:8181"
-
-    # Имя каталога (опционально, по умолчанию: "iceberg")
-    # Используется для идентификации каталога в Trino и других системах
-    # Формат идентификатора таблицы: catalogName.namespace.table
-    catalogName: "iceberg"
-
-    # Namespace в каталоге (обязательно)
-    namespace: analytics
-
-    # Название таблицы (обязательно)
+  type: trino
+  trino:
+    # URL сервера Trino (обязательно)
+    serverURL: "http://trino:8080"
+    
+    # Каталог для использования (обязательно)
+    catalog: hive
+    
+    # Схема для использования (обязательно)
+    schema: default
+    
+    # Таблица для чтения (обязательно, если не указан query)
     table: source_table
-
-    # Токен аутентификации (опционально)
-    token: "your-auth-token"
+    
+    # Кастомный SQL запрос (опционально)
+    # Если указан, используется вместо чтения всей таблицы
+    query: "SELECT * FROM hive.default.source_table WHERE id > 100"
+    
+    # Интервал опроса в секундах (опционально, по умолчанию: 5)
+    # Используется для периодического чтения новых данных
+    pollInterval: 60
+    
+    # Аутентификация Keycloak (опционально)
+    keycloak:
+      # Вариант 1: Использование долгоживущего токена напрямую (рекомендуется для долгоживущих токенов)
+      token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+      
+      # Вариант 2: Использование OAuth2 flow (альтернатива прямому токену)
+      # serverURL: "https://keycloak.example.com"
+      # realm: myrealm
+      # clientID: trino-client
+      # clientSecret: client-secret
+      # username: trino-user
+      # password: trino-password
 ```
 
-#### Особенности Iceberg источника
+#### Особенности Trino источника
 
-- **Стриминг чтение**: Использует Arrow RecordBatches для эффективного чтения
-- **Поддержка типов**: Автоматически обрабатывает различные типы данных Iceberg
-- **Метаданные**: Каждое сообщение содержит:
-  - `namespace` - namespace таблицы
+- **SQL запросы**: Поддержка кастомных SQL запросов с WHERE, JOIN и т.д.
+- **Периодический опрос**: Регулярно опрашивает таблицы на наличие новых данных
+- **Аутентификация Keycloak**: OAuth2/OIDC аутентификация через Keycloak
+  - **Прямой токен**: Использование долгоживущего токена, полученного из Keycloak (рекомендуется для долгоживущих токенов)
+  - **Password Grant**: Использование username/password для аутентификации
+  - **Client Credentials**: Использование client ID/secret для сервис-к-сервис аутентификации
+- **Автоматическое обновление токенов**: Токены автоматически обновляются до истечения срока действия (только для OAuth2 flow, не для прямых токенов)
+
+#### Получение токена из Keycloak
+
+Для использования долгоживущего токена вы можете получить его из Keycloak следующими способами:
+
+**Способ 1: Использование curl (Password Grant)**
+```bash
+curl -X POST "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=password" \
+  -d "client_id=trino-client" \
+  -d "client_secret=client-secret" \
+  -d "username=trino-user" \
+  -d "password=trino-password"
+```
+
+**Способ 2: Использование curl (Client Credentials)**
+```bash
+curl -X POST "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=trino-client" \
+  -d "client_secret=client-secret"
+```
+
+Ответ будет содержать поле `access_token`. Используйте это значение токена в поле `token` конфигурации Keycloak.
+
+**Примечание**: Для долгоживущих токенов настройте время жизни токена в настройках realm или клиента Keycloak.
+- **Метаданные**: Каждое сообщение содержит метаданные:
+  - `catalog` - название каталога
+  - `schema` - название схемы
   - `table` - название таблицы
 
-#### Требования для работы
-
-Для работы Iceberg коннектора необходимо настроить доступ к объектному хранилищу (S3/MinIO). Это можно сделать двумя способами:
-
-**1. Через секреты Kubernetes (рекомендуется):**
+#### Пример с кастомным запросом
 
 ```yaml
-sink:
-  type: iceberg
-  iceberg:
-    restCatalogUrl: "http://iceberg-rest:8181"
-    namespace: analytics
-    table: target_table
-    awsRegionSecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: AWS_REGION
-    awsAccessKeyIDSecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: AWS_ACCESS_KEY_ID
-    awsSecretAccessKeySecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: AWS_SECRET_ACCESS_KEY
-    awsEndpointURLSecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: AWS_ENDPOINT_URL_S3
+source:
+  type: trino
+  trino:
+    serverURL: "http://trino:8080"
+    catalog: hive
+    schema: analytics
+    query: |
+      SELECT
+        u.id,
+        u.email,
+        o.order_id,
+        o.total
+      FROM hive.analytics.users u
+      JOIN hive.analytics.orders o ON u.id = o.user_id
+      WHERE o.created_at > CURRENT_TIMESTAMP - INTERVAL '1' DAY
+    pollInterval: 300  # Опрос каждые 5 минут
+    keycloak:
+      serverURL: "https://keycloak.example.com"
+      realm: myrealm
+      clientID: trino-client
+      clientSecret: client-secret
+      username: trino-user
+      password: trino-password
 ```
-
-**2. Через переменные окружения в поде:**
-
-```bash
-export AWS_REGION=us-east-1
-export AWS_ACCESS_KEY_ID=admin
-export AWS_SECRET_ACCESS_KEY=password
-export AWS_ENDPOINT_URL_S3=http://localhost:9000  # Для MinIO
-```
-
-> **Примечание:** REST catalog управляет только метаданными (схемы, партиции). Файлы данных записываются напрямую в S3/MinIO через AWS SDK, поэтому необходимы AWS credentials.
 
 ### Приемник (Sink)
 
-Конфигурация Iceberg приемника:
+Конфигурация Trino приемника:
 
 ```yaml
 sink:
-  type: iceberg
-  iceberg:
-    # URL REST Catalog (обязательно)
-    restCatalogUrl: "http://iceberg-rest:8181"
-
-    # Имя каталога (опционально, по умолчанию: "iceberg")
-    # Используется для идентификации каталога в Trino и других системах
-    # Формат идентификатора таблицы: catalogName.namespace.table
-    catalogName: "iceberg"
-
-    # Namespace в каталоге (обязательно)
-    namespace: analytics
-
-    # Название таблицы (обязательно)
+  type: trino
+  trino:
+    # URL сервера Trino (обязательно)
+    serverURL: "http://trino:8080"
+    
+    # Каталог для использования (обязательно)
+    catalog: hive
+    
+    # Схема для использования (обязательно)
+    schema: default
+    
+    # Таблица для записи (обязательно)
     table: target_table
-
-    # Токен аутентификации (опционально)
-    token: "your-auth-token"
-
-    # Автоматическое создание namespace (опционально, по умолчанию: true)
-    autoCreateNamespace: true
-
+    
+    # Размер батча для вставки (опционально, по умолчанию: 1)
+    # Увеличьте для повышения производительности
+    batchSize: 100
+    
     # Автоматическое создание таблицы (опционально, по умолчанию: false)
-    # Если true, создает таблицу с полем "data" типа String
+    # Если true, создает таблицу с VARCHAR колонкой для JSON данных
     autoCreateTable: true
+    
+    # Аутентификация Keycloak (опционально)
+    keycloak:
+      serverURL: "https://keycloak.example.com"
+      realm: myrealm
+      clientID: trino-client
+      clientSecret: client-secret
+      username: trino-user
+      password: trino-password
 ```
 
-#### Особенности Iceberg приемника
+#### Особенности Trino приемника
 
-- **Батч-запись**: Группирует сообщения в батчи для эффективной записи
-- **Автосоздание**: Автоматически создает namespace и таблицы при необходимости
-- **Обработка конфликтов**: Автоматически обрабатывает конфликты при параллельных записях
-- **Arrow формат**: Использует Apache Arrow для эффективной сериализации данных
+- **Батч-вставки**: Группирует сообщения для эффективной записи
+- **Автосоздание таблиц**: Автоматически создает таблицы, если они не существуют
+- **Аутентификация Keycloak**: OAuth2/OIDC аутентификация через Keycloak
+- **Автоматическое обновление токенов**: Токены автоматически обновляются
 
-#### Пример с автосозданием и секретами
+#### Пример: Kafka → Trino с Keycloak
 
 ```yaml
-sink:
-  type: iceberg
-  iceberg:
-    restCatalogUrl: "http://iceberg-rest:8181"
-    # Имя каталога (опционально, по умолчанию: "iceberg")
-    # Используется для идентификации каталога в Trino и других системах
-    # Формат идентификатора таблицы: catalogName.namespace.table
-    catalogName: "iceberg"
-    namespace: analytics
-    table: events
-    tokenSecretRef:
-      name: iceberg-credentials
-      namespace: dataflow
-      key: token
-    # AWS credentials для записи данных в S3
-    awsRegionSecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: aws-region
-    awsAccessKeyIDSecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: aws-access-key-id
-    awsSecretAccessKeySecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: aws-secret-access-key
-    autoCreateNamespace: true
-    autoCreateTable: true
+apiVersion: dataflow.dataflow.io/v1
+kind: DataFlow
+metadata:
+  name: kafka-to-trino
+spec:
+  source:
+    type: kafka
+    kafka:
+      brokers:
+        - kafka:9092
+      topic: input-topic
+      consumerGroup: dataflow-group
+  sink:
+    type: trino
+    trino:
+      serverURL: "http://trino:8080"
+      catalog: hive
+      schema: default
+      table: output_table
+      batchSize: 100
+      keycloak:
+        # Использование долгоживущего токена, полученного из Keycloak
+        token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+        
+        # Альтернатива: Использование OAuth2 flow
+        # serverURL: "https://keycloak.example.com"
+        # realm: myrealm
+        # clientID: trino-client
+        # clientSecret: client-secret
+        # username: trino-user
+        # password: trino-password
 ```
 
-Автоматически созданная таблица будет иметь схему с полем `data` типа `String`, в котором хранится JSON представление сообщения.
+#### Пример: Trino с secrets
 
-> **Важно:** REST catalog управляет только метаданными. Файлы данных записываются напрямую в S3, поэтому необходимы AWS credentials через секреты или переменные окружения.
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: trino-credentials
+  namespace: default
+type: Opaque
+stringData:
+  serverURL: "http://trino:8080"
+  catalog: "hive"
+  schema: "default"
+  table: "output_table"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-credentials
+  namespace: default
+type: Opaque
+stringData:
+  serverURL: "https://keycloak.example.com"
+  realm: "myrealm"
+  clientID: "trino-client"
+  clientSecret: "client-secret"
+  username: "trino-user"
+  password: "trino-password"
+---
+apiVersion: dataflow.dataflow.io/v1
+kind: DataFlow
+metadata:
+  name: kafka-to-trino-secrets
+spec:
+  source:
+    type: kafka
+    kafka:
+      brokers:
+        - kafka:9092
+      topic: input-topic
+      consumerGroup: dataflow-group
+  sink:
+    type: trino
+    trino:
+      serverURLSecretRef:
+        name: trino-credentials
+        key: serverURL
+      catalogSecretRef:
+        name: trino-credentials
+        key: catalog
+      schemaSecretRef:
+        name: trino-credentials
+        key: schema
+      tableSecretRef:
+        name: trino-credentials
+        key: table
+      batchSize: 100
+      keycloak:
+        # Вариант 1: Использование токена из secret (рекомендуется для долгоживущих токенов)
+        tokenSecretRef:
+          name: keycloak-credentials
+          key: token
+        
+        # Вариант 2: Использование OAuth2 flow из secrets (альтернатива)
+        # serverURLSecretRef:
+        #   name: keycloak-credentials
+        #   key: serverURL
+        # realmSecretRef:
+        #   name: keycloak-credentials
+        #   key: realm
+        # clientIDSecretRef:
+        #   name: keycloak-credentials
+        #   key: clientID
+        # clientSecretSecretRef:
+        #   name: keycloak-credentials
+        #   key: clientSecret
+        # usernameSecretRef:
+        #   name: keycloak-credentials
+        #   key: username
+        # passwordSecretRef:
+        #   name: keycloak-credentials
+        #   key: password
+```
 
 ## Использование Secrets в Kubernetes
 
@@ -509,26 +631,18 @@ secretRef:
 - `connectionStringSecretRef` - строка подключения
 - `tableSecretRef` - название таблицы
 
-#### Iceberg
-- `restCatalogUrlSecretRef` - URL REST Catalog
-- `namespaceSecretRef` - namespace в каталоге
+#### Trino
+- `serverURLSecretRef` - URL сервера Trino
+- `catalogSecretRef` - название каталога
+- `schemaSecretRef` - название схемы
 - `tableSecretRef` - название таблицы
-- `tokenSecretRef` - токен аутентификации
-- `awsRegionSecretRef` - AWS регион
-- `awsAccessKeyIDSecretRef` - AWS access key ID
-- `awsSecretAccessKeySecretRef` - AWS secret access key
-- `awsEndpointURLSecretRef` - URL endpoint для S3 (опционально, только для MinIO)
-
-#### Nessie
-- `nessieUrlSecretRef` - URL сервера Nessie
-- `branchSecretRef` - название ветки
-- `namespaceSecretRef` - namespace в каталоге
-- `tableSecretRef` - название таблицы
-- `tokenSecretRef` - токен аутентификации
-- `awsRegionSecretRef` - AWS регион
-- `awsAccessKeyIDSecretRef` - AWS access key ID
-- `awsSecretAccessKeySecretRef` - AWS secret access key
-- `awsEndpointURLSecretRef` - URL endpoint для S3 (опционально, только для MinIO)
+- `keycloak.serverURLSecretRef` - URL сервера Keycloak
+- `keycloak.realmSecretRef` - название realm в Keycloak
+- `keycloak.clientIDSecretRef` - OAuth2 client ID
+- `keycloak.clientSecretSecretRef` - OAuth2 client secret
+- `keycloak.usernameSecretRef` - имя пользователя для password grant
+- `keycloak.passwordSecretRef` - пароль для password grant
+- `keycloak.tokenSecretRef` - OAuth2 токен (для долгоживущих токенов)
 
 ### Примеры использования
 
@@ -829,182 +943,6 @@ kubectl logs -l app.kubernetes.io/name=dataflow-operator | grep -i secret
 - Увеличьте `batchSize` для приемника (рекомендуется 50-100)
 - Используйте индексы на часто запрашиваемых полях
 - Настройте `pollInterval` в зависимости от частоты обновления данных
-
-### Iceberg
-
-- Используйте батчи для записи (автоматически, размер 10 сообщений)
-- Настройте правильный размер партиций для ваших данных
-- Используйте compaction для оптимизации чтения
-
-## Nessie
-
-Nessie коннектор поддерживает чтение и запись данных из/в Iceberg таблицы через Nessie транзакционный каталог. Nessie предоставляет Git-подобную модель версионирования для метаданных таблиц, а данные хранятся в S3-совместимом хранилище. Коннектор автоматически обрабатывает метаданные через Nessie API и использует AWS SDK для доступа к данным в S3.
-
-### Источник (Source)
-
-Конфигурация Nessie источника:
-
-```yaml
-source:
-  type: nessie
-  nessie:
-    # URL сервера Nessie (обязательно)
-    nessieUrl: "http://nessie:19120/api/v2"
-
-    # Ветка для чтения (опционально, по умолчанию: "main")
-    branch: "main"
-
-    # Namespace в каталоге (обязательно)
-    namespace: analytics
-
-    # Название таблицы (обязательно)
-    table: source_table
-
-    # Токен аутентификации (опционально)
-    token: "your-auth-token"
-```
-
-#### Особенности Nessie источника
-
-- **Чтение из Iceberg таблиц**: Использует metadata location из Nessie для загрузки таблиц
-- **S3 backend**: Автоматически работает с S3-совместимым хранилищем (AWS S3, MinIO, Yandex Object Storage)
-- **Поддержка s3a://**: Автоматически конвертирует s3a:// в s3:// для совместимости с iceberg-go
-- **Arrow формат**: Использует Apache Arrow для эффективного чтения данных
-- **Ветки**: Поддержка чтения из разных веток Nessie (по умолчанию: "main")
-- **Метаданные**: Каждое сообщение содержит:
-  - `namespace` - namespace таблицы
-  - `table` - название таблицы
-
-#### Требования для работы
-
-Для работы Nessie коннектора необходимо настроить доступ к объектному хранилищу (S3/MinIO). Это можно сделать двумя способами:
-
-**1. Через секреты Kubernetes (рекомендуется):**
-
-```yaml
-source:
-  type: nessie
-  nessie:
-    nessieUrl: "http://nessie:19120/api/v2"
-    namespace: analytics
-    table: source_table
-    awsRegionSecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: AWS_REGION
-    awsAccessKeyIDSecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: AWS_ACCESS_KEY_ID
-    awsSecretAccessKeySecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: AWS_SECRET_ACCESS_KEY
-    awsEndpointURLSecretRef:
-      name: s3-credentials
-      namespace: dataflow
-      key: AWS_ENDPOINT_URL_S3
-```
-
-**2. Через переменные окружения в поде:**
-
-```bash
-export AWS_REGION=us-east-1
-export AWS_ACCESS_KEY_ID=admin
-export AWS_SECRET_ACCESS_KEY=password
-export AWS_ENDPOINT_URL_S3=http://localhost:9000  # Для MinIO
-```
-
-> **Примечание:** Nessie управляет метаданными таблиц (metadata location), а файлы данных хранятся в S3/MinIO. Коннектор использует AWS SDK для доступа к данным, поэтому необходимы AWS credentials.
-
-### Приемник (Sink)
-
-Конфигурация Nessie приемника:
-
-```yaml
-sink:
-  type: nessie
-  nessie:
-    # URL сервера Nessie (обязательно)
-    nessieUrl: "http://nessie:19120/api/v2"
-
-    # Ветка для записи (опционально, по умолчанию: "main")
-    branch: "main"
-
-    # Namespace в каталоге (обязательно)
-    namespace: analytics
-
-    # Название таблицы (обязательно)
-    table: target_table
-
-    # Токен аутентификации (опционально)
-    token: "your-auth-token"
-
-    # Автоматическое создание таблицы (опционально, по умолчанию: false)
-    # Если true, создает таблицу с полем "data" типа String
-    autoCreateTable: true
-```
-
-#### Особенности Nessie приемника
-
-- **Батч-запись**: Группирует сообщения в батчи для эффективной записи
-- **Автосоздание**: Автоматически создает таблицы при необходимости
-- **Обработка конфликтов**: Автоматически обрабатывает конфликты при параллельных записях с retry механизмом
-- **Arrow формат**: Использует Apache Arrow для эффективной сериализации данных
-- **S3 backend**: Автоматически работает с S3-совместимым хранилищем
-- **Ветки**: Поддержка записи в разные ветки Nessie (по умолчанию: "main")
-- **Транзакции**: Использует транзакционную модель Nessie для атомарных операций
-
-#### Пример с автосозданием и секретами
-
-```yaml
-sink:
-  type: nessie
-  nessie:
-    nessieUrl: "http://nessie:19120/api/v2"
-    namespace: analytics
-    table: target_table
-    autoCreateTable: true
-    # Использование секретов для конфиденциальных данных
-    tokenSecretRef:
-      name: nessie-credentials
-      key: token
-    awsRegionSecretRef:
-      name: s3-credentials
-      key: AWS_REGION
-    awsAccessKeyIDSecretRef:
-      name: s3-credentials
-      key: AWS_ACCESS_KEY_ID
-    awsSecretAccessKeySecretRef:
-      name: s3-credentials
-      key: AWS_SECRET_ACCESS_KEY
-    awsEndpointURLSecretRef:
-      name: s3-credentials
-      key: AWS_ENDPOINT_URL_S3
-```
-
-#### Поддерживаемые секреты
-
-Nessie коннектор поддерживает следующие секреты:
-
-- `nessieUrlSecretRef` - URL сервера Nessie
-- `branchSecretRef` - название ветки
-- `namespaceSecretRef` - namespace в каталоге
-- `tableSecretRef` - название таблицы
-- `tokenSecretRef` - токен аутентификации
-- `awsRegionSecretRef` - AWS регион
-- `awsAccessKeyIDSecretRef` - AWS access key ID
-- `awsSecretAccessKeySecretRef` - AWS secret access key
-- `awsEndpointURLSecretRef` - AWS S3 endpoint URL (для MinIO)
-
-#### Отличия от Iceberg REST Catalog
-
-Nessie коннектор отличается от Iceberg REST Catalog коннектора:
-
-- **Версионирование**: Nessie предоставляет Git-подобную модель версионирования метаданных
-- **Транзакции**: Поддержка транзакционных операций с метаданными
-- **Ветки**: Работа с ветками и тегами для управления версиями
-- **Метаданные**: Метаданные хранятся в Nessie, а не в REST Catalog
 
 ## Устранение неполадок
 
