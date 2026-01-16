@@ -45,28 +45,40 @@ kubectl apply -f config/crd/bases/dataflow.dataflow.io_dataflows.yaml
 
 #### Installation via Helm (Recommended)
 
-1. Install the operator in the cluster:
+1. Install the operator from OCI registry:
 ```bash
-helm install dataflow-operator ./helm/dataflow-operator
+helm install dataflow-operator oci://ghcr.io/ilyario/helm-charts/dataflow-operator
 ```
 
 2. For installation with custom settings:
 ```bash
-helm install dataflow-operator ./helm/dataflow-operator \
+helm install dataflow-operator oci://ghcr.io/ilyario/helm-charts/dataflow-operator \
   --set image.repository=your-registry/controller \
   --set image.tag=v1.0.0 \
   --set replicaCount=2
 ```
 
-3. Check installation status:
+3. For installation in a specific namespace:
+```bash
+helm install dataflow-operator oci://ghcr.io/ilyario/helm-charts/dataflow-operator \
+  --namespace dataflow-system \
+  --create-namespace
+```
+
+4. Check installation status:
 ```bash
 kubectl get pods -l app.kubernetes.io/name=dataflow-operator
+```
+
+**Note**: For local development, you can also use the local chart:
+```bash
+helm install dataflow-operator ./helm/dataflow-operator
 ```
 
 #### Updating
 
 ```bash
-helm upgrade dataflow-operator ./helm/dataflow-operator
+helm upgrade dataflow-operator oci://ghcr.io/ilyario/helm-charts/dataflow-operator
 ```
 
 #### Uninstallation

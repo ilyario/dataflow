@@ -24,10 +24,10 @@
 
 #### Базовая установка
 
-Самый простой способ установить оператор:
+Самый простой способ установить оператор из OCI registry:
 
 ```bash
-helm install dataflow-operator ./helm/dataflow-operator
+helm install dataflow-operator oci://ghcr.io/ilyario/helm-charts/dataflow-operator
 ```
 
 Эта команда установит оператор с настройками по умолчанию в namespace `default`.
@@ -35,9 +35,14 @@ helm install dataflow-operator ./helm/dataflow-operator
 #### Установка в конкретный namespace
 
 ```bash
-helm install dataflow-operator ./helm/dataflow-operator \
+helm install dataflow-operator oci://ghcr.io/ilyario/helm-charts/dataflow-operator \
   --namespace dataflow-system \
   --create-namespace
+```
+
+**Примечание**: Для локальной разработки вы также можете использовать локальный chart:
+```bash
+helm install dataflow-operator ./helm/dataflow-operator
 ```
 
 #### Установка с кастомными настройками
@@ -45,7 +50,7 @@ helm install dataflow-operator ./helm/dataflow-operator \
 Вы можете переопределить значения по умолчанию через флаги:
 
 ```bash
-helm install dataflow-operator ./helm/dataflow-operator \
+helm install dataflow-operator oci://ghcr.io/ilyario/helm-charts/dataflow-operator \
   --set image.repository=your-registry/controller \
   --set image.tag=v1.0.0 \
   --set replicaCount=2 \
@@ -94,7 +99,7 @@ securityContext:
 Затем установите:
 
 ```bash
-helm install dataflow-operator ./helm/dataflow-operator -f my-values.yaml
+helm install dataflow-operator oci://ghcr.io/ilyario/helm-charts/dataflow-operator -f my-values.yaml
 ```
 
 #### Проверка установки
