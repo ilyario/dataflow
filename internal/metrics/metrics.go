@@ -20,12 +20,12 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 var (
 	// DataFlowMessagesReceived - количество полученных сообщений по манифесту
-	DataFlowMessagesReceived = promauto.NewCounterVec(
+	DataFlowMessagesReceived = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_messages_received_total",
 			Help: "Total number of messages received from source by dataflow manifest",
@@ -34,7 +34,7 @@ var (
 	)
 
 	// DataFlowMessagesSent - количество отправленных сообщений по манифесту
-	DataFlowMessagesSent = promauto.NewCounterVec(
+	DataFlowMessagesSent = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_messages_sent_total",
 			Help: "Total number of messages sent to sink by dataflow manifest",
@@ -43,7 +43,7 @@ var (
 	)
 
 	// DataFlowProcessingDuration - время обработки сообщений
-	DataFlowProcessingDuration = promauto.NewHistogramVec(
+	DataFlowProcessingDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "dataflow_processing_duration_seconds",
 			Help:    "Time spent processing messages",
@@ -53,7 +53,7 @@ var (
 	)
 
 	// ConnectorMessagesRead - количество прочитанных сообщений из source коннектора
-	ConnectorMessagesRead = promauto.NewCounterVec(
+	ConnectorMessagesRead = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_connector_messages_read_total",
 			Help: "Total number of messages read from source connector",
@@ -62,7 +62,7 @@ var (
 	)
 
 	// ConnectorMessagesWritten - количество записанных сообщений в sink коннектор
-	ConnectorMessagesWritten = promauto.NewCounterVec(
+	ConnectorMessagesWritten = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_connector_messages_written_total",
 			Help: "Total number of messages written to sink connector",
@@ -71,7 +71,7 @@ var (
 	)
 
 	// ConnectorErrors - количество ошибок в коннекторах
-	ConnectorErrors = promauto.NewCounterVec(
+	ConnectorErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_connector_errors_total",
 			Help: "Total number of errors in connectors",
@@ -80,7 +80,7 @@ var (
 	)
 
 	// ConnectorConnectionStatus - статус подключения коннектора
-	ConnectorConnectionStatus = promauto.NewGaugeVec(
+	ConnectorConnectionStatus = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dataflow_connector_connection_status",
 			Help: "Connection status of connector (1 = connected, 0 = disconnected)",
@@ -89,7 +89,7 @@ var (
 	)
 
 	// TransformerExecutions - количество выполнений трансформера
-	TransformerExecutions = promauto.NewCounterVec(
+	TransformerExecutions = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_transformer_executions_total",
 			Help: "Total number of transformer executions",
@@ -98,7 +98,7 @@ var (
 	)
 
 	// TransformerErrors - количество ошибок в трансформерах
-	TransformerErrors = promauto.NewCounterVec(
+	TransformerErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_transformer_errors_total",
 			Help: "Total number of errors in transformers",
@@ -107,7 +107,7 @@ var (
 	)
 
 	// TransformerDuration - время выполнения трансформера
-	TransformerDuration = promauto.NewHistogramVec(
+	TransformerDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "dataflow_transformer_duration_seconds",
 			Help:    "Time spent executing transformer",
@@ -117,7 +117,7 @@ var (
 	)
 
 	// TransformerMessagesIn - количество входящих сообщений в трансформер
-	TransformerMessagesIn = promauto.NewCounterVec(
+	TransformerMessagesIn = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_transformer_messages_in_total",
 			Help: "Total number of messages input to transformer",
@@ -126,7 +126,7 @@ var (
 	)
 
 	// TransformerMessagesOut - количество исходящих сообщений из трансформера
-	TransformerMessagesOut = promauto.NewCounterVec(
+	TransformerMessagesOut = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dataflow_transformer_messages_out_total",
 			Help: "Total number of messages output from transformer",
@@ -135,7 +135,7 @@ var (
 	)
 
 	// DataFlowStatus - статус DataFlow манифеста
-	DataFlowStatus = promauto.NewGaugeVec(
+	DataFlowStatus = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "dataflow_status",
 			Help: "Status of DataFlow manifest (1 = Running, 0 = Stopped/Error)",
@@ -143,6 +143,25 @@ var (
 		[]string{"namespace", "name", "phase"},
 	)
 )
+
+func init() {
+	// Регистрируем все метрики в реестре controller-runtime
+	metrics.Registry.MustRegister(
+		DataFlowMessagesReceived,
+		DataFlowMessagesSent,
+		DataFlowProcessingDuration,
+		ConnectorMessagesRead,
+		ConnectorMessagesWritten,
+		ConnectorErrors,
+		ConnectorConnectionStatus,
+		TransformerExecutions,
+		TransformerErrors,
+		TransformerDuration,
+		TransformerMessagesIn,
+		TransformerMessagesOut,
+		DataFlowStatus,
+	)
+}
 
 // RecordMessageReceived записывает метрику получения сообщения
 func RecordMessageReceived(namespace, name, sourceType string) {

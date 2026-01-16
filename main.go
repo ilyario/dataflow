@@ -38,6 +38,7 @@ import (
 
 	dataflowv1 "github.com/dataflow-operator/dataflow/api/v1"
 	"github.com/dataflow-operator/dataflow/internal/controller"
+	_ "github.com/dataflow-operator/dataflow/internal/metrics" // Импортируем для регистрации метрик
 	//+kubebuilder:scaffold:imports
 )
 
