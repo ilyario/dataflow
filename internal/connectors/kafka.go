@@ -209,38 +209,38 @@ func (k *KafkaSourceConnector) Connect(ctx context.Context) error {
 	}
 
 	consumer, err := sarama.NewConsumerGroup(k.config.Brokers, consumerGroup, saramaConfig)
-			if err != nil {
-				// Record error metric
-				if k.namespace != "" && k.name != "" {
-					metrics.RecordConnectorError(k.namespace, k.name, "kafka", "source", "connect", "consumer_group_error")
-				}
-				saslMechanism := "none"
-				if k.config.SASL != nil {
-					saslMechanism = k.config.SASL.Mechanism
-					if saslMechanism == "" {
-						saslMechanism = "plain"
-					}
-				}
-				k.logger.Error(err, "Failed to create consumer group",
-					"brokers", k.config.Brokers,
-					"group", consumerGroup)
-				return fmt.Errorf("failed to create consumer group (brokers: %v, group: %s, tls: %v, tlsSkipVerify: %v, sasl: %v, saslMechanism: %s, username: %s): %w",
-					k.config.Brokers, consumerGroup, k.config.TLS != nil,
-					k.config.TLS != nil && k.config.TLS.InsecureSkipVerify,
-					k.config.SASL != nil, saslMechanism,
-					func() string {
-						if k.config.SASL != nil {
-							return k.config.SASL.Username
-						}
-						return ""
-					}(), err)
-			}
-		k.consumer = consumer
-
-		// Record connection status
+	if err != nil {
+		// Record error metric
 		if k.namespace != "" && k.name != "" {
-			metrics.SetConnectorConnectionStatus(k.namespace, k.name, "kafka", "source", true)
+			metrics.RecordConnectorError(k.namespace, k.name, "kafka", "source", "connect", "consumer_group_error")
 		}
+		saslMechanism := "none"
+		if k.config.SASL != nil {
+			saslMechanism = k.config.SASL.Mechanism
+			if saslMechanism == "" {
+				saslMechanism = "plain"
+			}
+		}
+		k.logger.Error(err, "Failed to create consumer group",
+			"brokers", k.config.Brokers,
+			"group", consumerGroup)
+		return fmt.Errorf("failed to create consumer group (brokers: %v, group: %s, tls: %v, tlsSkipVerify: %v, sasl: %v, saslMechanism: %s, username: %s): %w",
+			k.config.Brokers, consumerGroup, k.config.TLS != nil,
+			k.config.TLS != nil && k.config.TLS.InsecureSkipVerify,
+			k.config.SASL != nil, saslMechanism,
+			func() string {
+				if k.config.SASL != nil {
+					return k.config.SASL.Username
+				}
+				return ""
+			}(), err)
+	}
+	k.consumer = consumer
+
+	// Record connection status
+	if k.namespace != "" && k.name != "" {
+		metrics.SetConnectorConnectionStatus(k.namespace, k.name, "kafka", "source", true)
+	}
 
 	// Initialize Schema Registry client if configured
 	if k.config.Format == "avro" && k.config.SchemaRegistry != nil {
@@ -622,10 +622,28 @@ type kafkaConsumerGroupHandler struct {
 	connector *KafkaSourceConnector
 	msgChan   chan *types.Message
 	ready     chan bool
+	readyOnce sync.Once // Protects ready channel from being closed multiple times
 }
 
 func (h *kafkaConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
-	close(h.ready)
+	// Use sync.Once to ensure channel is closed only once
+	// This protects against multiple Setup calls during rebalancing
+	// sync.Once guarantees the function passed to Do will execute exactly once,
+	// even if Setup is called concurrently from multiple goroutines
+	h.readyOnce.Do(func() {
+		// Use recover to handle potential panic if channel is already closed
+		// This can happen in rare race conditions during rebalancing
+		defer func() {
+			if r := recover(); r != nil {
+				// Channel was already closed, which is fine - just log and continue
+				// This should not happen with sync.Once, but we handle it gracefully
+				if h.connector != nil {
+					h.connector.logger.V(1).Info("Channel already closed in Setup (recovered from panic)", "error", r)
+				}
+			}
+		}()
+		close(h.ready)
+	})
 	return nil
 }
 
@@ -841,38 +859,38 @@ func (k *KafkaSinkConnector) Connect(ctx context.Context) error {
 		return fmt.Errorf("no Kafka brokers specified")
 	}
 
-		producer, err := sarama.NewSyncProducer(k.config.Brokers, saramaConfig)
-		if err != nil {
-			// Record error metric
-			if k.namespace != "" && k.name != "" {
-				metrics.RecordConnectorError(k.namespace, k.name, "kafka", "sink", "connect", "producer_error")
-			}
-			saslMechanism := "none"
-			if k.config.SASL != nil {
-				saslMechanism = k.config.SASL.Mechanism
-				if saslMechanism == "" {
-					saslMechanism = "plain"
-				}
-			}
-			k.logger.Error(err, "Failed to create producer",
-				"brokers", k.config.Brokers)
-			return fmt.Errorf("failed to create producer (brokers: %v, tls: %v, tlsSkipVerify: %v, sasl: %v, saslMechanism: %s, username: %s): %w",
-				k.config.Brokers, k.config.TLS != nil,
-				k.config.TLS != nil && k.config.TLS.InsecureSkipVerify,
-				k.config.SASL != nil, saslMechanism,
-				func() string {
-					if k.config.SASL != nil {
-						return k.config.SASL.Username
-					}
-					return ""
-				}(), err)
-		}
-		k.producer = producer
-
-		// Record connection status
+	producer, err := sarama.NewSyncProducer(k.config.Brokers, saramaConfig)
+	if err != nil {
+		// Record error metric
 		if k.namespace != "" && k.name != "" {
-			metrics.SetConnectorConnectionStatus(k.namespace, k.name, "kafka", "sink", true)
+			metrics.RecordConnectorError(k.namespace, k.name, "kafka", "sink", "connect", "producer_error")
 		}
+		saslMechanism := "none"
+		if k.config.SASL != nil {
+			saslMechanism = k.config.SASL.Mechanism
+			if saslMechanism == "" {
+				saslMechanism = "plain"
+			}
+		}
+		k.logger.Error(err, "Failed to create producer",
+			"brokers", k.config.Brokers)
+		return fmt.Errorf("failed to create producer (brokers: %v, tls: %v, tlsSkipVerify: %v, sasl: %v, saslMechanism: %s, username: %s): %w",
+			k.config.Brokers, k.config.TLS != nil,
+			k.config.TLS != nil && k.config.TLS.InsecureSkipVerify,
+			k.config.SASL != nil, saslMechanism,
+			func() string {
+				if k.config.SASL != nil {
+					return k.config.SASL.Username
+				}
+				return ""
+			}(), err)
+	}
+	k.producer = producer
+
+	// Record connection status
+	if k.namespace != "" && k.name != "" {
+		metrics.SetConnectorConnectionStatus(k.namespace, k.name, "kafka", "sink", true)
+	}
 
 	return nil
 }
