@@ -326,6 +326,16 @@ type PostgreSQLSinkSpec struct {
 	// +optional
 	AutoCreateTable *bool `json:"autoCreateTable,omitempty"`
 
+	// UpsertMode enables UPSERT behavior (INSERT ... ON CONFLICT ... DO UPDATE)
+	// If true, existing records will be updated instead of being skipped
+	// +optional
+	UpsertMode *bool `json:"upsertMode,omitempty"`
+
+	// ConflictKey specifies the column(s) to use for conflict detection in UPSERT mode
+	// If not specified, defaults to PRIMARY KEY
+	// +optional
+	ConflictKey *string `json:"conflictKey,omitempty"`
+
 	// ConnectionStringSecretRef references a Kubernetes secret for connection string
 	// +optional
 	ConnectionStringSecretRef *SecretRef `json:"connectionStringSecretRef,omitempty"`

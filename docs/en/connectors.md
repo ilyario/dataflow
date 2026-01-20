@@ -7,7 +7,7 @@ DataFlow Operator supports various connectors for data sources and sinks. Each c
 | Connector | Source | Sink | Features |
 |-----------|--------|------|----------|
 | Kafka | ✅ | ✅ | Consumer groups, TLS, SASL, Avro, Schema Registry |
-| PostgreSQL | ✅ | ✅ | SQL queries, batch inserts, auto-create tables |
+| PostgreSQL | ✅ | ✅ | SQL queries, batch inserts, auto-create tables, UPSERT mode |
 | Trino | ✅ | ✅ | SQL queries, Keycloak OAuth2 authentication, batch inserts |
 
 > **Note**: This is a simplified English version. For complete documentation, see the [Russian version](../ru/connectors.md) or refer to the code examples in `config/samples/`.

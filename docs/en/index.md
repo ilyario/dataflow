@@ -120,6 +120,7 @@ Message processing orchestrator that coordinates the work of source, transformat
 - Batch inserts for improved performance
 - Automatic table creation
 - JSONB support for flexible schema
+- UPSERT mode for updating existing records
 
 ### Trino
 

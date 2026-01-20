@@ -403,6 +403,102 @@ func TestPostgreSQLConnectorIntegration(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, count)
 	})
+
+	t.Run("PostgreSQL Sink Connector with UPSERT", func(t *testing.T) {
+		upsertTable := "upsert_table"
+		_, err = conn.Exec(ctx, fmt.Sprintf(`
+			CREATE TABLE IF NOT EXISTS %s (
+				id INTEGER PRIMARY KEY,
+				name VARCHAR(100),
+				value INTEGER,
+				updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)
+		`, upsertTable))
+		require.NoError(t, err)
+
+		// Очищаем таблицу перед тестом
+		_, err = conn.Exec(ctx, fmt.Sprintf("DELETE FROM %s", upsertTable))
+		require.NoError(t, err)
+
+		// Создаем начальную запись
+		_, err = conn.Exec(ctx, fmt.Sprintf(
+			"INSERT INTO %s (id, name, value) VALUES (1, 'initial', 100)",
+			upsertTable,
+		))
+		require.NoError(t, err)
+
+		// Проверяем начальное состояние
+		var initialValue int
+		err = conn.QueryRow(ctx, fmt.Sprintf("SELECT value FROM %s WHERE id = 1", upsertTable)).Scan(&initialValue)
+		require.NoError(t, err)
+		assert.Equal(t, 100, initialValue)
+
+		// Создаем sink connector с включенным upsertMode
+		upsertMode := true
+		conflictKey := "id"
+		sinkSpec := &v1.PostgreSQLSinkSpec{
+			ConnectionString: connStr,
+			Table:            upsertTable,
+			UpsertMode:       &upsertMode,
+			ConflictKey:      &conflictKey,
+		}
+		sinkConnector := connectors.NewPostgreSQLSinkConnector(sinkSpec)
+
+		err = sinkConnector.Connect(ctx)
+		require.NoError(t, err)
+		defer sinkConnector.Close()
+
+		// Отправляем обновленное сообщение с тем же id
+		updatedMessage := map[string]interface{}{
+			"id":    1,
+			"name":  "updated",
+			"value": 200,
+		}
+
+		msgChan := make(chan *types.Message, 1)
+		msgBytes, err := json.Marshal(updatedMessage)
+		require.NoError(t, err)
+		msgChan <- types.NewMessage(msgBytes)
+		close(msgChan)
+
+		err = sinkConnector.Write(ctx, msgChan)
+		require.NoError(t, err)
+
+		// Проверяем, что запись была обновлена, а не добавлена новая
+		var count int
+		err = conn.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", upsertTable)).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count, "должна быть только одна запись")
+
+		// Проверяем, что значения обновились
+		var updatedValue int
+		var updatedName string
+		err = conn.QueryRow(ctx, fmt.Sprintf("SELECT value, name FROM %s WHERE id = 1", upsertTable)).Scan(&updatedValue, &updatedName)
+		require.NoError(t, err)
+		assert.Equal(t, 200, updatedValue, "значение должно быть обновлено")
+		assert.Equal(t, "updated", updatedName, "имя должно быть обновлено")
+
+		// Теперь отправляем новую запись с другим id
+		newMessage := map[string]interface{}{
+			"id":    2,
+			"name":  "new",
+			"value": 300,
+		}
+
+		msgChan2 := make(chan *types.Message, 1)
+		msgBytes2, err := json.Marshal(newMessage)
+		require.NoError(t, err)
+		msgChan2 <- types.NewMessage(msgBytes2)
+		close(msgChan2)
+
+		err = sinkConnector.Write(ctx, msgChan2)
+		require.NoError(t, err)
+
+		// Проверяем, что теперь две записи
+		err = conn.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", upsertTable)).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 2, count, "должно быть две записи")
+	})
 }
 
 // TestNessieConnectorIntegration тестирует Nessie source и sink коннекторы

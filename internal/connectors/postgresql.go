@@ -333,6 +333,9 @@ func (p *PostgreSQLSinkConnector) Write(ctx context.Context, messages <-chan *ty
 			var query string
 			var values []interface{}
 
+			// Check if upsert mode is enabled
+			upsertMode := p.config.UpsertMode != nil && *p.config.UpsertMode
+
 			// Check if table has JSONB column (auto-created tables)
 			var hasJSONB bool
 			checkJSONBQuery := `SELECT EXISTS (
@@ -345,7 +348,12 @@ func (p *PostgreSQLSinkConnector) Write(ctx context.Context, messages <-chan *ty
 			err := p.conn.QueryRow(ctx, checkJSONBQuery, p.config.Table).Scan(&hasJSONB)
 			if err == nil && hasJSONB {
 				// Use JSONB storage
-				query = fmt.Sprintf("INSERT INTO %s (data) VALUES ($1::jsonb) ON CONFLICT DO NOTHING", p.config.Table)
+				if upsertMode {
+					// UPSERT: update data field on conflict with PRIMARY KEY
+					query = fmt.Sprintf("INSERT INTO %s (data) VALUES ($1::jsonb) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data", p.config.Table)
+				} else {
+					query = fmt.Sprintf("INSERT INTO %s (data) VALUES ($1::jsonb) ON CONFLICT DO NOTHING", p.config.Table)
+				}
 				jsonData, _ := json.Marshal(data)
 				values = []interface{}{string(jsonData)}
 			} else {
@@ -366,24 +374,55 @@ func (p *PostgreSQLSinkConnector) Write(ctx context.Context, messages <-chan *ty
 					continue // Skip empty messages
 				}
 
-				query = fmt.Sprintf(
-					"INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
-					p.config.Table,
-					fmt.Sprintf(`"%s"`, columns[0])+func() string {
-						result := ""
-						for i := 1; i < len(columns); i++ {
-							result += fmt.Sprintf(`, "%s"`, columns[i])
+				// Build column list for INSERT
+				columnList := fmt.Sprintf(`"%s"`, columns[0])
+				for i := 1; i < len(columns); i++ {
+					columnList += fmt.Sprintf(`, "%s"`, columns[i])
+				}
+
+				// Build placeholder list for VALUES
+				placeholderList := "$1"
+				for i := 2; i <= len(placeholders); i++ {
+					placeholderList += fmt.Sprintf(", $%d", i)
+				}
+
+				if upsertMode {
+					// Determine conflict key
+					conflictKey := "id" // Default to PRIMARY KEY
+					if p.config.ConflictKey != nil && *p.config.ConflictKey != "" {
+						conflictKey = *p.config.ConflictKey
+					}
+
+					// Build UPDATE clause for all columns except the conflict key
+					updateClauses := make([]string, 0)
+					for _, col := range columns {
+						if col != conflictKey {
+							updateClauses = append(updateClauses, fmt.Sprintf(`"%s" = EXCLUDED."%s"`, col, col))
 						}
-						return result
-					}(),
-					fmt.Sprintf("$1")+func() string {
-						result := ""
-						for i := 2; i <= len(placeholders); i++ {
-							result += fmt.Sprintf(", $%d", i)
+					}
+
+					if len(updateClauses) == 0 {
+						// If only conflict key is present, just do nothing on conflict
+						query = fmt.Sprintf(
+							"INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO NOTHING",
+							p.config.Table, columnList, placeholderList, conflictKey,
+						)
+					} else {
+						updateClause := updateClauses[0]
+						for i := 1; i < len(updateClauses); i++ {
+							updateClause += ", " + updateClauses[i]
 						}
-						return result
-					}(),
-				)
+						query = fmt.Sprintf(
+							"INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s",
+							p.config.Table, columnList, placeholderList, conflictKey, updateClause,
+						)
+					}
+				} else {
+					query = fmt.Sprintf(
+						"INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
+						p.config.Table, columnList, placeholderList,
+					)
+				}
 				values = colValues
 			}
 

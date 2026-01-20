@@ -58,6 +58,7 @@ spec:
       table: target_orders
       autoCreateTable: true
       batchSize: 100
+      upsertMode: true  # Enables updating existing records instead of skipping them
   transformations:
     # Keep only required fields
     - type: select
@@ -78,6 +79,8 @@ spec:
 
 - **Online replication**: periodically copying updated rows from OLTP database to analytics database
 - **ETL pipeline**: cleaning and reshaping data when moving between PostgreSQL schemas/clusters
+
+**Important:** With `upsertMode: true`, existing records in the target table will be updated on conflict with PRIMARY KEY (or specified `conflictKey`). Without `upsertMode`, updated records from the source will be skipped if they already exist in the target table.
 
 ## Using Secrets for Credentials
 

@@ -7,7 +7,7 @@ DataFlow Operator поддерживает различные коннектор
 | Коннектор | Источник | Приемник | Особенности |
 |-----------|----------|----------|-------------|
 | Kafka | ✅ | ✅ | Consumer groups, TLS, SASL, Avro, Schema Registry |
-| PostgreSQL | ✅ | ✅ | SQL запросы, батч-вставки, автосоздание таблиц |
+| PostgreSQL | ✅ | ✅ | SQL запросы, батч-вставки, автосоздание таблиц, UPSERT режим |
 | Trino | ✅ | ✅ | SQL запросы, аутентификация Keycloak OAuth2, батч-вставки |
 
 ## Kafka
@@ -277,6 +277,16 @@ sink:
     # Автоматическое создание таблицы (опционально, по умолчанию: false)
     # Если true, создает таблицу с JSONB полем для гибкой схемы
     autoCreateTable: true
+
+    # Режим UPSERT (опционально, по умолчанию: false)
+    # Если true, существующие записи будут обновляться вместо пропуска
+    # Используется ON CONFLICT DO UPDATE для обновления записей
+    upsertMode: true
+
+    # Ключ конфликта для UPSERT (опционально, по умолчанию: PRIMARY KEY)
+    # Указывает колонку(ы) для определения конфликта при UPSERT
+    # Если не указан, используется PRIMARY KEY таблицы
+    conflictKey: "id"
 ```
 
 #### Особенности PostgreSQL приемника
@@ -285,6 +295,7 @@ sink:
 - **Автосоздание таблиц**: Автоматически создает таблицы с JSONB полем
 - **Гибкая схема**: Поддерживает как JSONB (для автосозданных таблиц), так и колоночный формат
 - **Индексы**: Автоматически создает GIN индекс на JSONB поле для быстрого поиска
+- **UPSERT режим**: Поддерживает обновление существующих записей при конфликте по PRIMARY KEY или указанному ключу
 
 #### Пример с автосозданием таблицы
 
@@ -309,6 +320,26 @@ CREATE TABLE events (
 CREATE INDEX idx_events_data ON events USING GIN (data);
 ```
 
+#### Пример с UPSERT для обновления существующих записей
+
+```yaml
+sink:
+  type: postgresql
+  postgresql:
+    connectionString: "postgres://user:password@localhost:5432/analytics"
+    table: orders
+    upsertMode: true  # Включает обновление существующих записей
+    conflictKey: "id"  # Использует поле 'id' для определения конфликта
+    batchSize: 100
+```
+
+При включенном `upsertMode`:
+- Если запись с таким же `id` (или указанным `conflictKey`) уже существует, она будет обновлена
+- Если записи нет, она будет вставлена
+- Это особенно полезно для синхронизации данных, когда источник периодически отправляет обновленные записи
+
+**Важно:** Для работы UPSERT таблица должна иметь PRIMARY KEY или UNIQUE constraint на указанном `conflictKey`.
+
 ## Trino
 
 Trino коннектор поддерживает чтение из таблиц и запись в таблицы Trino (ранее PrestoSQL). Поддерживает SQL запросы, аутентификацию через Keycloak OAuth2/OIDC и батч-вставки.
@@ -323,29 +354,29 @@ source:
   trino:
     # URL сервера Trino (обязательно)
     serverURL: "http://trino:8080"
-    
+
     # Каталог для использования (обязательно)
     catalog: hive
-    
+
     # Схема для использования (обязательно)
     schema: default
-    
+
     # Таблица для чтения (обязательно, если не указан query)
     table: source_table
-    
+
     # Кастомный SQL запрос (опционально)
     # Если указан, используется вместо чтения всей таблицы
     query: "SELECT * FROM hive.default.source_table WHERE id > 100"
-    
+
     # Интервал опроса в секундах (опционально, по умолчанию: 5)
     # Используется для периодического чтения новых данных
     pollInterval: 60
-    
+
     # Аутентификация Keycloak (опционально)
     keycloak:
       # Вариант 1: Использование долгоживущего токена напрямую (рекомендуется для долгоживущих токенов)
       token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-      
+
       # Вариант 2: Использование OAuth2 flow (альтернатива прямому токену)
       # serverURL: "https://keycloak.example.com"
       # realm: myrealm
@@ -435,24 +466,24 @@ sink:
   trino:
     # URL сервера Trino (обязательно)
     serverURL: "http://trino:8080"
-    
+
     # Каталог для использования (обязательно)
     catalog: hive
-    
+
     # Схема для использования (обязательно)
     schema: default
-    
+
     # Таблица для записи (обязательно)
     table: target_table
-    
+
     # Размер батча для вставки (опционально, по умолчанию: 1)
     # Увеличьте для повышения производительности
     batchSize: 100
-    
+
     # Автоматическое создание таблицы (опционально, по умолчанию: false)
     # Если true, создает таблицу с VARCHAR колонкой для JSON данных
     autoCreateTable: true
-    
+
     # Аутентификация Keycloak (опционально)
     keycloak:
       serverURL: "https://keycloak.example.com"
@@ -496,7 +527,7 @@ spec:
       keycloak:
         # Использование долгоживущего токена, полученного из Keycloak
         token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-        
+
         # Альтернатива: Использование OAuth2 flow
         # serverURL: "https://keycloak.example.com"
         # realm: myrealm
@@ -568,7 +599,7 @@ spec:
         tokenSecretRef:
           name: keycloak-credentials
           key: token
-        
+
         # Вариант 2: Использование OAuth2 flow из secrets (альтернатива)
         # serverURLSecretRef:
         #   name: keycloak-credentials
